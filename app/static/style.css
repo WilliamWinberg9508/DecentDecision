@@ -336,19 +336,109 @@ footer.site p { max-width: 62ch; }
 
 a.issue.unread { border-left: 3px solid var(--accent); }
 
-textarea {
-  width: 100%;
-  font: inherit;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--paper);
-  color: var(--ink);
-  resize: vertical;
-}
+/* The 170px box is right for writing a question and far too tall for a
+   comment, where it pushes the thread itself off the screen. */
+.panel-body textarea { min-height: 92px; }
 
 @media (max-width: 620px) {
   /* Indentation eats the whole screen on a phone long before it runs out of
      meaning, so the thread flattens and the border carries the nesting. */
   .comment { margin-left: 0 !important; }
+}
+
+/* --- the discussion window ------------------------------------------------
+   A dialog with no JavaScript. The button is a link to #discuss and the rules
+   below are what open it, which has two side effects worth having: the open
+   window is a real URL you can send to someone, and it survives a reload.
+
+   :has() gives the second rule -- a link to a single comment, the kind an
+   inbox notification carries, opens the window straight onto that comment.
+   In a browser too old for :has() the #discuss button still works; you just
+   land on the page rather than inside the conversation. */
+
+.discuss-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 22px 0 0;
+}
+.discuss {
+  display: inline-block;
+  padding: 9px 18px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.discuss:hover { filter: brightness(1.08); color: #fff; }
+@media (prefers-color-scheme: dark) { .discuss, .discuss:hover { color: #16171a; } }
+
+.overlay { display: none; }
+.overlay:target,
+.overlay:has(:target) {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.overlay-out {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 18, 14, 0.45);
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(820px, calc(100% - 32px));
+  max-height: calc(100vh - 72px);
+  margin: 36px auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+.panel-head .hint { margin: 2px 0 0; }
+
+.panel-close {
+  font-size: 26px;
+  line-height: 1;
+  text-decoration: none;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.panel-close:hover { color: var(--ink); }
+
+/* The body scrolls, not the page behind it. */
+.panel-body { overflow-y: auto; padding: 20px 22px 28px; }
+/* The 54ch measure is right for a page column and wrong inside a window that
+   is already narrow -- it leaves a thin ribbon of text in a wide box. */
+.panel-body > .lede:first-child { margin-top: 0; max-width: none; }
+
+@media (max-width: 620px) {
+  /* A window that is nearly the whole screen anyway is better as the whole
+     screen: no margins to mis-tap around. */
+  .panel {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
 }

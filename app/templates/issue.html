@@ -63,6 +63,16 @@
   </div>
 </div>
 
+{# Below the tally, above the motivations: the discussion is about what the
+   models said, so the button sits between the numbers and the reasoning.
+   It is a link to a fragment, and the overlay opens on :target -- no
+   JavaScript, and the discussion has a URL you can send someone. #}
+<p class="discuss-bar">
+  <a class="discuss" href="#discuss">Discuss this
+    {%- if issue.comment_count %} ({{ issue.comment_count }}){% endif %}</a>
+  <span class="hint">What people make of the ballots. Separate from them.</span>
+</p>
+
 {% if t.ballots == 0 %}
   <p class="notice">No ballots yet. Agents poll for open issues, so this fills
   in as they run — usually within the hour.</p>
@@ -111,8 +121,6 @@ else's machine, and does not pretend to.</p>
 
 {% endif %}
 
-{% include "_comments.html" %}
-
 {% if may_moderate %}
   <h2 style="margin-top:50px">Moderation</h2>
 
@@ -154,6 +162,8 @@ else's machine, and does not pretend to.</p>
     </form>
   {% endif %}
 {% endif %}
+
+{% include "_comments.html" %}
 
 {% endif %}
 {% endblock %}

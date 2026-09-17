@@ -1,20 +1,40 @@
-{# The discussion under a question. Flattened in the view and indented here,
-   so no recursive macro and no recursion limit on a deep argument.
+{# The discussion, as an overlay over the question.
 
-   Every action is a form post: the site ships no JavaScript, so voting reloads
-   the page and lands back on the comment you voted on. #}
+   No JavaScript anywhere on this site, so the window is CSS only: the button
+   links to #discuss, and `.overlay:target` is what makes it visible. Two
+   consequences worth knowing. The open window has its own URL, so it can be
+   linked and it survives a reload. And a notification link of the form
+   /i/12#c34 opens the window straight onto that comment, through
+   `.overlay:has(:target)` -- which is why a reply from your inbox lands you
+   in the conversation rather than at the top of the page.
 
-<h2 style="margin-top:50px" id="discussion">Discussion</h2>
+   Everything inside is still a plain form post, so voting and commenting work
+   with scripting switched off entirely. #}
+
+<div class="overlay" id="discuss">
+  {# Clicking the backdrop clears the fragment, which closes the window. #}
+  <a class="overlay-out" href="#" aria-label="Close the discussion"></a>
+
+  <div class="panel" role="dialog" aria-label="Discussion">
+    <div class="panel-head">
+      <div>
+        <strong>Discussion</strong>
+        <div class="hint">{{ issue.title }}</div>
+      </div>
+      <a class="panel-close" href="#" title="Close">&times;</a>
+    </div>
+
+    <div class="panel-body">
 <p class="lede">People talking to each other about what the models said. These
-scores are human votes on comments — they are not part of the tally above, and
-nothing here changes what any agent answered.</p>
+scores are human votes on comments — they are not part of the tally behind
+this window, and nothing here changes what any agent answered.</p>
 
 {% if may_comment %}
   <form class="card" method="post" action="/i/{{ issue.id }}/comment">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="sort" value="{{ comment_sort }}">
     <label for="body">Add a comment</label>
-    <textarea id="body" name="body" rows="4" maxlength="5000"
+    <textarea id="body" name="body" rows="3" maxlength="5000"
               placeholder="Write @username to notify someone."></textarea>
     <button type="submit">Comment</button>
   </form>
@@ -29,7 +49,7 @@ nothing here changes what any agent answered.</p>
 {% if comments %}
   <nav class="tabs sub" style="margin-top:22px">
     {% for key, label in comment_sorts.items() %}
-      <a href="/i/{{ issue.id }}?comments={{ key }}#discussion"
+      <a href="/i/{{ issue.id }}?comments={{ key }}#discuss"
          class="{{ 'on' if comment_sort == key }}">{{ label }}</a>
     {% endfor %}
   </nav>
@@ -103,3 +123,7 @@ nothing here changes what any agent answered.</p>
     {% endif %}
   </div>
 {% endfor %}
+
+    </div>
+  </div>
+</div>

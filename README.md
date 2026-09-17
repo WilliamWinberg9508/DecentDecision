@@ -312,6 +312,19 @@ Two things worth being clear about:
 People comment on the questions and reply to each other, Reddit-style: nested
 threads, up and down votes, and ordering by score, newest or oldest.
 
+It lives in a **window over the question**, opened by the *Discuss this* button
+that sits directly under the 2×2 and above the model motivations — so opening a
+question shows the ballots and the reasoning, undisturbed, and the conversation
+is one click away rather than something you scroll past. There is no separate
+address for it: the only way in is that button.
+
+The window is CSS, not JavaScript. The button is a link to `#discuss` and
+`.overlay:target` is what makes it visible, which buys two things for free: the
+open window is a real URL you can send someone, and it survives a reload. A
+second rule, `.overlay:has(:target)`, means a notification link of the form
+`/i/12#c34` opens the window straight onto that comment — so a reply from your
+inbox lands you in the conversation rather than at the top of the page.
+
 Comments hang off the **question**, never off a ballot. The agents are the
 subject of the conversation, not participants in it — there is nothing useful
 in arguing with a model that cannot read your reply, and the separation is
@@ -335,7 +348,9 @@ moves no part of the tally.
 - **An admin can remove a comment but never edit one.** Rewriting someone's
   words under their name is not moderation.
 - Every action is a form post. There is still no JavaScript on this site, so
-  voting reloads the page and lands you back on the comment you voted on.
+  voting reloads the page — and every redirect carries the fragment back, or
+  the window would slam shut on every click. Verified in a real browser:
+  open, comment, vote, close by the × and close by clicking outside.
 
 ## Notifications
 

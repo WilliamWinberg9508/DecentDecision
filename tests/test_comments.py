@@ -311,3 +311,71 @@ async def test_the_comment_score_is_not_mixed_into_the_ballot_tally(
     row = await sql("SELECT ballots, supported, contested, opposed, irrelevant "
                     "FROM issues WHERE id = %s", (iid,), one=True)
     assert all(v == 0 for v in row.values())
+
+
+# --- the discussion window ---------------------------------------------------
+# It is a dialog built out of :target, so what can be asserted is the markup
+# and the fragments. The CSS that hides it until it is opened is checked in
+# test_templates.py, next to the other things the stylesheet is load-bearing for.
+
+async def test_the_discuss_button_sits_between_the_tally_and_the_motivations(
+        client, browser):
+    """Where the button is *is* the feature: the discussion is about what the
+    models said, so it belongs after the numbers and before the reasoning."""
+    iid, _ = await scene(client, browser)
+    page = (await client.get(f"/i/{iid}")).text
+
+    quad = page.index('class="quad"')
+    button = page.index('href="#discuss"')
+    by_model = page.index("<h2 style=\"margin-top:44px\">By model</h2>") \
+        if "By model" in page else page.index("No ballots yet")
+
+    assert quad < button < by_model
+
+
+async def test_the_thread_is_inside_the_window(client, browser):
+    """Not a section of the page that happens to be styled as one -- the
+    comments are children of the overlay, which is what makes them invisible
+    until it is opened."""
+    iid, _ = await scene(client, browser)
+    await say(client, iid, "inside the window")
+    page = (await client.get(f"/i/{iid}")).text
+
+    overlay = page.index('<div class="overlay" id="discuss">')
+    comment = page.index("inside the window")
+    closing = page.rindex("</div>")
+    assert overlay < comment < closing
+
+
+async def test_the_window_has_no_page_of_its_own(client, browser):
+    """Only reachable by opening a question and pressing the button, so there
+    is no separate address for it to drift out of sync at."""
+    iid, _ = await scene(client, browser)
+    for path in (f"/i/{iid}/discuss", "/discuss", f"/i/{iid}/comments"):
+        assert (await client.get(path)).status_code == 404
+
+
+async def test_posting_and_voting_come_back_with_the_window_open(
+        client, browser):
+    """Every action reloads the page, so each one has to bring the fragment
+    back or the window would slam shut on every click."""
+    iid, anna = await scene(client, browser)
+    posted = await say(client, iid, "a comment")
+    cid = (await last_comment())["id"]
+    assert posted.headers["location"].endswith(f"#c{cid}")
+
+    voted = await vote(anna, cid, 1, iid)
+    assert voted.headers["location"].endswith(f"#c{cid}")
+
+    removed = await client.post(f"/c/{cid}/remove", data={
+        "sort": "best", "csrf": await csrf(client, f"/i/{iid}")})
+    assert removed.headers["location"].endswith(f"#c{cid}")
+
+
+async def test_the_sort_tabs_keep_the_window_open(client, browser):
+    iid, _ = await scene(client, browser)
+    await say(client, iid, "something to sort")
+    page = (await client.get(f"/i/{iid}")).text
+
+    assert f'/i/{iid}?comments=new#discuss' in page
+    assert "#discussion" not in page, "a stale anchor from the old page layout"

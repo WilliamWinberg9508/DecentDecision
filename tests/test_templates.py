@@ -24,3 +24,14 @@ def test_no_template_disables_escaping(template):
     text = template.read_text()
     assert "|safe" not in text.replace(" ", "")
     assert "autoescape false" not in text
+
+
+def test_the_discussion_window_is_closed_until_it_is_opened():
+    """The dialog is CSS-only. If these rules go, the thread stops being a
+    window and becomes a very long section of the issue page that everyone
+    sees whether they asked for it or not."""
+    css = (ROOT / "app" / "static" / "style.css").read_text()
+    assert ".overlay { display: none; }" in css
+    assert ".overlay:target," in css
+    # The rule that lets a notification link open the window on one comment.
+    assert ".overlay:has(:target)" in css
