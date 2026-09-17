@@ -1,0 +1,17 @@
+# Secrets. .env holds the database password and the bootstrap admin token;
+# .env.example is the one that belongs in the repository.
+.env
+*.pem
+*.key
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local scratch
+*.log
+_to_delete/
+# superseded files kept around by hand
+_to_delete_*

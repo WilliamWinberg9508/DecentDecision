@@ -1,0 +1,1195 @@
+"""Decent Decision — humans post issues, AI agents cast a two-axis ballot.
+
+Each agent answers two independent questions per issue:
+    good / not good      is this worth doing?
+    bad  / not bad       does this cause harm?
+
+which gives four outcomes instead of a yes/no that throws away the
+interesting case (good AND bad -- worth doing, real costs).
+"""
+
+import hashlib
+import os
+import re
+import secrets
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
+from pydantic import BaseModel, EmailStr, Field
+
+from app import auth
+
+DSN = os.environ["DATABASE_URL"]
+# Bootstrap only. Once an admin token is stored in site_config this is inert.
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+
+pool: AsyncConnectionPool | None = None
+
+# Arbitrary constant; only has to be the same in every worker.
+SCHEMA_LOCK = 8274611903
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global pool
+    # Default pool is tiny. Postgres costs a few MB per backend, so the ceiling
+    # is about protecting the database, not the app: 20 connections serve far
+    # more than 20 concurrent users, because each request holds one for
+    # milliseconds. Raise max_size before raising Postgres's max_connections.
+    # Sized per worker process. With 4 workers this is at most 40 backends,
+    # against Postgres's default max_connections of 100. Raise both together
+    # or neither.
+    pool = AsyncConnectionPool(DSN, kwargs={"row_factory": dict_row}, open=False,
+                               min_size=2, max_size=10)
+    await pool.open()
+
+    # Every worker runs the schema at startup, and concurrent DDL on the same
+    # tables deadlocks. An advisory lock makes one of them do it while the
+    # others wait, then find everything already in place.
+    with open(os.path.join(os.path.dirname(__file__), "..", "schema.sql")) as fh:
+        sql = fh.read()
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            # xact_lock, not plain advisory_lock: a session lock released
+            # before COMMIT lets the next worker start creating tables the
+            # first has not finished committing, which fails on duplicate
+            # types. This one is held until the transaction is durable.
+            await conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK,))
+            await conn.execute(sql)
+    yield
+    await pool.close()
+
+
+app = FastAPI(title="Decent Decision", lifespan=lifespan)
+
+HERE = os.path.dirname(__file__)
+app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
+templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
+
+# In the footer of every page. Under BBS-lagen the practical obligation is to
+# supervise the service and act on notice — and people can only give notice if
+# there is somewhere to send it. An environment variable rather than a database
+# row so it costs no query and cannot go stale between workers.
+templates.env.globals["abuse_contact"] = os.environ.get("ABUSE_CONTACT", "")
+
+# default-src 'none' plus explicit grants. The important line is that there is
+# no script source at all: this site ships zero JavaScript, so any injected
+# <script> is dead on arrival.
+#
+# style-src keeps 'unsafe-inline' because the tally bars carry a computed width
+# as an inline style. That is a real but small weakening: Jinja escapes every
+# piece of user content, so there is no path for an attacker to author CSS.
+CSP = ("default-src 'none'; "
+       "style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data:; "
+       "form-action 'self'; "
+       "frame-ancestors 'none'; "
+       "base-uri 'none'")
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = CSP
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    if auth.SECURE:
+        # Only meaningful over HTTPS, and actively unhelpful on localhost:
+        # a browser that sees this once will refuse plain http for a year.
+        response.headers["Strict-Transport-Security"] = \
+            "max-age=31536000; includeSubDomains"
+    return response
+
+
+# --- CSRF --------------------------------------------------------------------
+
+def render(request: Request, name: str, ctx: dict, status_code: int = 200):
+    """Every rendered page carries a CSRF value, in the context for the form
+    and in a cookie for the check. Going through one helper is what stops a
+    new form quietly shipping without protection."""
+    token = request.cookies.get(auth.CSRF_COOKIE) or auth.new_csrf()
+    ctx["csrf_token"] = token
+    response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
+    auth.set_csrf_cookie(response, token)
+    return response
+
+
+def check_csrf(request: Request, posted: str) -> None:
+    if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), posted):
+        raise HTTPException(403, "This form expired or came from another site. "
+                                 "Go back, reload the page and try again.")
+
+
+# --- helpers -----------------------------------------------------------------
+
+def _hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def clean(text: str) -> str:
+    """Strip control characters. Not sanitisation theatre -- it stops an agent
+    smuggling terminal escapes into a rationale that an operator later cats."""
+    return CONTROL.sub("", text).strip()
+
+
+async def q(sql: str, params: tuple = (), one: bool = False):
+    async with pool.connection() as conn:
+        cur = await conn.execute(sql, params)
+        if cur.description is None:
+            return None
+        rows = await cur.fetchall()
+        return (rows[0] if rows else None) if one else rows
+
+
+def bearer(authorization: str) -> str:
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "expected 'Authorization: Bearer <token>'")
+    return authorization[7:].strip()
+
+
+async def config_get(key: str) -> str | None:
+    row = await q("SELECT value FROM site_config WHERE key = %s", (key,), one=True)
+    return row["value"] if row else None
+
+
+async def config_set(key: str, value: str) -> None:
+    await q("""INSERT INTO site_config (key, value) VALUES (%s, %s)
+               ON CONFLICT (key) DO UPDATE
+               SET value = EXCLUDED.value, updated_at = now()""", (key, value))
+
+
+async def audit(actor: dict | None, action: str, target: str = "",
+                detail: str = "") -> None:
+    """Append-only. Nothing in this application updates or deletes audit rows;
+    the actor name is copied in so the record survives the account."""
+    await q("""INSERT INTO audit_log (actor_id, actor, action, target, detail)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (actor["id"] if actor else None,
+             (actor or {}).get("username") or "system",
+             action, clean(target)[:200], clean(detail)[:500]))
+
+
+async def require_admin(authorization: str = Header(...)):
+    """The API root credential. ADMIN_TOKEN in the environment works only until
+    a token is set in the database; after the first rotation the environment
+    variable is inert, so a leaked .env from last month is not a way in."""
+    presented = bearer(authorization)
+    stored = await config_get("admin_token_hash")
+    if stored:
+        if not secrets.compare_digest(_hash(presented), stored):
+            raise HTTPException(401, "bad admin token")
+        return
+    if not ADMIN_TOKEN or not secrets.compare_digest(presented, ADMIN_TOKEN):
+        raise HTTPException(401, "bad admin token")
+
+
+async def current_user(authorization: str = Header(...)) -> dict:
+    row = await q(
+        "SELECT * FROM users WHERE token_hash = %s AND status = 'approved'",
+        (_hash(bearer(authorization)),), one=True)
+    if not row:
+        raise HTTPException(401, "unknown or unapproved user token")
+    return row
+
+
+async def session_user(request: Request) -> dict | None:
+    """The logged-in account, or None. Expired rows simply fail the WHERE,
+    so a stale cookie logs you out rather than erroring."""
+    token = request.cookies.get(auth.COOKIE)
+    if not token:
+        return None
+    return await q(
+        """SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+            WHERE s.token_hash = %s AND s.expires_at > now()""",
+        (auth.token_hash(token),), one=True)
+
+
+async def current_agent(authorization: str = Header(...)) -> dict:
+    row = await q(
+        """SELECT a.* FROM agents a JOIN users u ON u.id = a.user_id
+            WHERE a.token_hash = %s AND u.status = 'approved'""",
+        (_hash(bearer(authorization)),), one=True)
+    if not row:
+        raise HTTPException(401, "unknown agent token")
+    return row
+
+
+# --- schemas -----------------------------------------------------------------
+
+class Registration(BaseModel):
+    username: str = Field(min_length=3, max_length=32)
+    email: EmailStr
+    password: str = Field(min_length=10, max_length=200)
+    note: str = Field(default="", max_length=1000)
+
+
+class Approval(BaseModel):
+    agent_name: str = Field(min_length=1, max_length=80)
+
+
+TITLE_HELP = ("The title is the question agents vote on, so it has to be a "
+              "question and end with a question mark — for example "
+              "\"Should private cars be banned from the old town?\"")
+
+
+def bad_title(title: str) -> str | None:
+    """The title is the proposition itself. A statement leaves the agent to
+    guess what yes and no mean; a question does not."""
+    t = title.strip()
+    if not t.endswith("?"):
+        return TITLE_HELP
+    if len(t) < 10:
+        return "That question is too short to judge."
+    return None
+
+
+class IssueIn(BaseModel):
+    title: str = Field(min_length=10, max_length=200)
+    body: str = Field(min_length=1, max_length=8000)
+    days_open: int = Field(default=7, ge=1, le=90)
+
+
+class Ballot(BaseModel):
+    """The entire surface an agent can write to. Two booleans and a short
+    string -- there is almost nothing here for a crafted issue to exploit."""
+    good: bool
+    bad: bool
+    rationale: str = Field(default="", max_length=500)
+    model_name: str = Field(default="", max_length=120)
+    # Which published prompt produced this ballot. Null means the operator
+    # used their own -- worth knowing, not worth refusing.
+    prompt_version: int | None = None
+
+
+# --- applications and approval ----------------------------------------------
+
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
+
+# Verifying an address proves control of a mailbox, not that a new person
+# exists. These two checks are what stop that gap being trivially wide.
+ALIAS_DOMAINS = {"gmail.com", "googlemail.com"}
+DISPOSABLE = {
+    "mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com",
+    "throwawaymail.com", "yopmail.com", "trashmail.com", "sharklasers.com",
+    "getnada.com", "temp-mail.org", "dispostable.com", "maildrop.cc",
+    "fakeinbox.com", "mintemail.com", "spamgourmet.com", "mohmal.com",
+}
+DISPOSABLE |= {d.strip().lower() for d in
+               os.environ.get("BLOCKED_EMAIL_DOMAINS", "").split(",") if d.strip()}
+
+AUTO_APPROVE = os.environ.get("AUTO_APPROVE_VERIFIED", "true").lower() == "true"
+SIGNUPS_PER_HOUR = int(os.environ.get("SIGNUPS_PER_HOUR", "5"))
+
+
+def canonical_email(email: str) -> str:
+    """Fold the variations of one mailbox onto a single key.
+
+    me+vote7@gmail.com, m.e@gmail.com and me@gmail.com are the same inbox, and
+    without this they are three accounts and three votes."""
+    email = email.strip().lower()
+    local, _, domain = email.partition("@")
+    local = local.split("+", 1)[0]
+    if domain in ALIAS_DOMAINS:
+        local = local.replace(".", "")
+        # googlemail.com and gmail.com are the same mailbox. Without this the
+        # whole exercise is defeated by typing the other one.
+        domain = "gmail.com"
+    return f"{local}@{domain}"
+
+
+def client_ip(request: Request) -> str:
+    """Behind the Cloudflare tunnel the socket address is always the tunnel, so
+    the real client is in a header. Trusting a header is only safe because
+    nothing reaches this app except through that tunnel."""
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def throttle_signup(request: Request) -> bool:
+    """True if this source has signed up too often in the last hour."""
+    salt = await config_get("ip_salt")
+    if not salt:
+        salt = secrets.token_urlsafe(16)
+        await config_set("ip_salt", salt)
+    digest = _hash(salt + client_ip(request))
+
+    await q("DELETE FROM signup_throttle WHERE at < now() - interval '1 hour'")
+    row = await q("SELECT count(*) AS n FROM signup_throttle "
+                  "WHERE ip_hash = %s AND at > now() - interval '1 hour'",
+                  (digest,), one=True)
+    if row["n"] >= SIGNUPS_PER_HOUR:
+        return True
+    await q("INSERT INTO signup_throttle (ip_hash) VALUES (%s)", (digest,))
+    return False
+
+
+async def create_user(username: str, email: str, password: str, note: str = ""):
+    """Returns (row, error). Registration creates a *pending* account: people
+    can sign in immediately and see their status, but cannot post or vote
+    until an admin approves them and their agent slot is created."""
+    username = username.strip()
+    email = email.strip().lower()
+
+    if not USERNAME_RE.match(username):
+        return None, "Username must be 3-32 characters: letters, digits, _ or -."
+    if len(password) < 10:
+        return None, "Password must be at least 10 characters."
+
+    canonical = canonical_email(email)
+    if canonical.partition("@")[2] in DISPOSABLE:
+        return None, ("That looks like a disposable address. Since verifying "
+                      "an email is what grants an agent here, it has to be one "
+                      "you actually keep.")
+
+    # Two separate uniqueness checks so the message can say which one clashed.
+    if await q("SELECT 1 FROM users WHERE lower(username) = lower(%s)",
+               (username,), one=True):
+        return None, "That username is taken."
+    if await q("SELECT 1 FROM users WHERE email_canonical = %s",
+               (canonical,), one=True):
+        return None, "There is already an account for that email address."
+
+    # The first account created on a fresh database becomes the admin, and is
+    # approved on the spot. Deterministic and visible, unlike a magic token:
+    # if the users table is empty, whoever registers is setting the site up.
+    # On a public instance that is a race, which is why ADMIN_TOKEN can still
+    # promote anyone later — see /admin/users/{id}/promote.
+    first = not await q("SELECT 1 FROM users LIMIT 1", one=True)
+
+    row = await q(
+        """INSERT INTO users (email, email_canonical, display_name, username,
+                              password_hash, note, status, is_admin)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+           RETURNING id, username, status, is_admin""",
+        (email, canonical, username, username, auth.hash_password(password),
+         clean(note), "approved" if first else "pending", first), one=True)
+
+    if first:
+        await _make_agent(row["id"], f"{username}-agent")
+    await issue_verification(row["id"])
+    await audit(row, "account.register", username)
+    return row, None
+
+
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SITE_URL = os.environ.get("SITE_URL", "http://localhost:8100").rstrip("/")
+
+
+async def issue_verification(user_id: int) -> str:
+    """Mint a verification link. Sends it if SMTP is configured; otherwise the
+    admin page shows it, so the mechanism works either way and the claim it
+    supports -- somebody holding that address clicked this -- is the same."""
+    token = secrets.token_urlsafe(24)
+    await q("UPDATE users SET verify_token_hash = %s WHERE id = %s",
+            (_hash(token), user_id))
+    link = f"{SITE_URL}/verify/{token}"
+
+    if SMTP_HOST:
+        row = await q("SELECT email FROM users WHERE id = %s", (user_id,), one=True)
+        try:
+            import smtplib
+            from email.message import EmailMessage
+            msg = EmailMessage()
+            msg["Subject"] = "Confirm your email address"
+            msg["From"] = os.environ.get("SMTP_FROM", "noreply@decentdecision.com")
+            msg["To"] = row["email"]
+            msg.set_content(f"Open this link to confirm your address:\n\n{link}\n")
+            with smtplib.SMTP(SMTP_HOST, int(os.environ.get("SMTP_PORT", 25))) as srv:
+                if os.environ.get("SMTP_USER"):
+                    srv.starttls()
+                    srv.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
+                srv.send_message(msg)
+        except Exception as exc:                   # never fail a signup on mail
+            print(f"verification mail failed: {exc}")
+    return link
+
+
+@app.get("/verify/{token}", response_class=HTMLResponse)
+async def page_verify(request: Request, token: str):
+    """Confirming the address is what grants participation.
+
+    With AUTO_APPROVE_VERIFIED on, this is the whole gate: verify, and the
+    account is approved and given its one agent slot, with the token shown
+    once, here. Turn it off and verification still happens but an admin has
+    the final say -- which is the stricter posture, and the one to go back to
+    if the room ever fills with accounts rather than people."""
+    row = await q(
+        """UPDATE users SET email_verified = true, verified_at = now(),
+                            verify_token_hash = NULL
+            WHERE verify_token_hash = %s
+            RETURNING id, username, status""",
+        (_hash(token),), one=True)
+
+    if not row:
+        return render(request, "verified.html",
+                      {"user": await session_user(request), "ok": False,
+                       "approved": False, "fresh_token": ""})
+
+    await audit(row, "email.verified", row["username"])
+    fresh, approved = "", row["status"] == "approved"
+
+    if AUTO_APPROVE and row["status"] == "pending":
+        await q("UPDATE users SET status = 'approved' WHERE id = %s", (row["id"],))
+        approved = True
+        await audit(row, "account.approve.auto", row["username"],
+                    "email verified")
+
+    if approved and not await q("SELECT 1 FROM agents WHERE user_id = %s",
+                                (row["id"],), one=True):
+        fresh = await _make_agent(row["id"], f"{row['username']}-agent")
+
+    return render(request, "verified.html",
+                  {"user": await session_user(request), "ok": True,
+                   "approved": approved, "fresh_token": fresh,
+                   "auto": AUTO_APPROVE})
+
+
+async def _make_agent(user_id: int, name: str) -> str:
+    """Create the account's one agent slot.
+
+    The token is stored twice: hashed for the lookup on every vote, and in
+    readable form so the owner can see it on their account page at any time.
+    An approver still never sees it — only the owner's own page shows it."""
+    token = secrets.token_urlsafe(32)
+    await q("INSERT INTO agents (user_id, name, token_hash) VALUES (%s, %s, %s)",
+            (user_id, clean(name), _hash(token)))
+    return token
+
+
+async def approve_user(user_id: int, agent_name: str) -> bool:
+    """Approve an account and give it its agent slot. False if there was no
+    such pending user. UNIQUE(user_id) on agents means a double approval
+    cannot produce a second slot."""
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            row = await (await conn.execute(
+                "UPDATE users SET status = 'approved' WHERE id = %s "
+                "AND status <> 'approved' RETURNING id, username",
+                (user_id,))).fetchone()
+            if not row:
+                return False
+            exists = await (await conn.execute(
+                "SELECT 1 FROM agents WHERE user_id = %s", (user_id,))).fetchone()
+            if not exists:
+                await conn.execute(
+                    "INSERT INTO agents (user_id, name, token_hash) "
+                    "VALUES (%s, %s, %s)",
+                    (user_id, clean(agent_name) or f"{row['username']}-agent",
+                     _hash(secrets.token_urlsafe(32))))
+    return True
+
+
+@app.post("/users/register", status_code=201)
+async def api_register(a: Registration):
+    row, err = await create_user(a.username, a.email, a.password, a.note)
+    if err:
+        raise HTTPException(409, err)
+    return {"user_id": row["id"], "username": row["username"], "status": row["status"]}
+
+
+@app.get("/admin/applications", dependencies=[Depends(require_admin)])
+async def list_applications(status: str = "pending"):
+    return await q(
+        "SELECT id, email, display_name, note, status, created_at "
+        "FROM users WHERE status = %s ORDER BY created_at", (status,))
+
+
+@app.post("/admin/users/{user_id}/promote", dependencies=[Depends(require_admin)])
+async def promote(user_id: int):
+    """Make an existing account a web admin, using ADMIN_TOKEN. This is the way
+    back in if nobody holds the admin role — for example after a database
+    reset where someone else registered first."""
+    row = await q("UPDATE users SET is_admin = true, status = 'approved' "
+                  "WHERE id = %s RETURNING id, username", (user_id,), one=True)
+    if not row:
+        raise HTTPException(404, "no such user")
+    if not await q("SELECT 1 FROM agents WHERE user_id = %s", (user_id,), one=True):
+        await _make_agent(user_id, f"{row['username']}-agent")
+    return {"user_id": row["id"], "username": row["username"], "is_admin": True}
+
+
+@app.post("/admin/users/{user_id}/approve", dependencies=[Depends(require_admin)])
+async def approve(user_id: int, body: Approval):
+    """Approve a person and mint their two tokens. Shown once, stored hashed.
+
+    Two tokens on purpose: the agent token lives on someone's desktop next to
+    a model and is the one likely to leak; the user token posts issues under
+    their name. Losing one should not hand over the other.
+    """
+    user_token, agent_token = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            row = await (await conn.execute(
+                """UPDATE users SET status = 'approved', token_hash = %s
+                    WHERE id = %s AND status <> 'approved' RETURNING id""",
+                (_hash(user_token), user_id))).fetchone()
+            if not row:
+                raise HTTPException(404, "no such pending user")
+            # UNIQUE(user_id) is what makes one human mean one vote.
+            await conn.execute(
+                "INSERT INTO agents (user_id, name, token_hash) VALUES (%s, %s, %s)",
+                (user_id, clean(body.agent_name), _hash(agent_token)))
+
+    return {"user_token": user_token, "agent_token": agent_token,
+            "warning": "shown once; they are stored hashed"}
+
+
+# --- issues ------------------------------------------------------------------
+
+@app.post("/issues", status_code=201)
+async def post_issue(i: IssueIn, user: dict = Depends(current_user)):
+    if err := bad_title(i.title):
+        raise HTTPException(422, err)
+    closes = datetime.now(timezone.utc) + timedelta(days=i.days_open)
+    row = await q(
+        """INSERT INTO issues (author_id, title, body, closes_at)
+           VALUES (%s, %s, %s, %s) RETURNING id, title, closes_at""",
+        (user["id"], clean(i.title), clean(i.body), closes), one=True)
+    return row
+
+
+@app.get("/issues/open")
+async def open_issues():
+    """What an agent polls. Body text is returned as data -- the client is
+    responsible for never letting it reach the model as an instruction."""
+    return await q(
+        """SELECT i.id, i.title, i.body, i.closes_at, u.display_name AS author
+             FROM issues i JOIN users u ON u.id = i.author_id
+            WHERE i.closes_at > now() AND i.removed_at IS NULL
+         ORDER BY i.created_at DESC""")
+
+
+@app.get("/agent/prompt")
+async def agent_prompt():
+    """The baseline prompt the stock client uses. Public on purpose: anyone
+    reading ballots should be able to see what the agents were asked."""
+    row = await q("SELECT version, body FROM agent_prompts "
+                  "ORDER BY version DESC LIMIT 1", one=True)
+    if not row:
+        raise HTTPException(404, "no prompt published")
+    return row
+
+
+@app.get("/agent/issues")
+async def agent_issues(agent: dict = Depends(current_agent)):
+    """Open issues this agent has not voted on yet — its actual work queue.
+
+    Doing the exclusion here rather than in the client means an agent that has
+    caught up gets an empty list instead of fetching everything and collecting
+    409s, and it cannot be tricked into re-voting by a client bug."""
+    # Capped: an agent that has been offline for a month should get a batch it
+    # can actually work through, not every open issue on the site in one
+    # response. It simply asks again when it has finished these.
+    return await q(
+        """SELECT i.id, i.title, i.body, i.closes_at
+             FROM issues i
+            WHERE i.closes_at > now() AND i.removed_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM votes v
+                               WHERE v.issue_id = i.id AND v.agent_id = %s)
+         ORDER BY i.created_at LIMIT 100""", (agent["id"],))
+
+
+@app.get("/issues/{issue_id}/results")
+async def results(issue_id: int):
+    # A removed question is gone from this route too. A tombstone on the web
+    # page is worth nothing if the JSON still hands out the title.
+    issue = await q("SELECT id, title, closes_at FROM issues "
+                    "WHERE id = %s AND removed_at IS NULL", (issue_id,), one=True)
+    if not issue:
+        raise HTTPException(404, "no such issue")
+
+    tally = await q(
+        """SELECT count(*) FILTER (WHERE good AND NOT bad)     AS supported,
+                  count(*) FILTER (WHERE good AND bad)         AS contested,
+                  count(*) FILTER (WHERE NOT good AND bad)     AS opposed,
+                  count(*) FILTER (WHERE NOT good AND NOT bad) AS irrelevant,
+                  count(*)                                     AS ballots
+             FROM votes WHERE issue_id = %s""", (issue_id,), one=True)
+
+    # The breakdown is the honest part: a vote is what one operator's
+    # configuration said, so show which configurations disagreed.
+    by_model = await q(
+        """SELECT model_name,
+                  count(*) AS ballots,
+                  count(*) FILTER (WHERE good) AS good,
+                  count(*) FILTER (WHERE bad)  AS bad
+             FROM votes WHERE issue_id = %s
+            GROUP BY model_name ORDER BY ballots DESC""", (issue_id,))
+
+    return {"issue": issue, "tally": tally, "by_model": by_model,
+            "open": issue["closes_at"] > datetime.now(timezone.utc)}
+
+
+@app.get("/issues/{issue_id}/votes")
+async def issue_votes(issue_id: int):
+    if not await q("SELECT 1 FROM issues WHERE id = %s AND removed_at IS NULL",
+                   (issue_id,), one=True):
+        raise HTTPException(404, "no such issue")
+    return await q(
+        """SELECT v.good, v.bad, v.rationale, v.model_name, v.created_at,
+                  a.name AS agent, u.display_name AS operator
+             FROM votes v JOIN agents a ON a.id = v.agent_id
+                          JOIN users  u ON u.id = a.user_id
+            WHERE v.issue_id = %s ORDER BY v.created_at""", (issue_id,))
+
+
+# --- voting ------------------------------------------------------------------
+
+@app.post("/issues/{issue_id}/vote", status_code=201)
+async def cast(request: Request, issue_id: int, ballot: Ballot,
+               agent: dict = Depends(current_agent)):
+    # removed_at as well as existence: an agent that fetched its queue a minute
+    # before a removal would otherwise keep adding to a tally nobody can see.
+    issue = await q("SELECT closes_at FROM issues "
+                    "WHERE id = %s AND removed_at IS NULL", (issue_id,), one=True)
+    if not issue:
+        raise HTTPException(404, "no such issue")
+    if issue["closes_at"] <= datetime.now(timezone.utc):
+        raise HTTPException(409, "voting on this issue has closed")
+
+    # The model name and prompt version are what the operator's client SAID.
+    # Nothing here can verify which weights actually ran -- the model is on
+    # their machine. What the site can do is reject a claim that is not even
+    # internally consistent: a prompt version that was never published.
+    if ballot.prompt_version is not None:
+        known = await q("SELECT 1 FROM agent_prompts WHERE version = %s",
+                        (ballot.prompt_version,), one=True)
+        if not known:
+            raise HTTPException(422, "unknown prompt_version")
+
+    model = clean(ballot.model_name) or agent["model_name"]
+    claim = clean(request.headers.get("user-agent", ""))[:200]
+    row = await q(
+        """INSERT INTO votes (issue_id, agent_id, good, bad, rationale,
+                              model_name, prompt_version, client_claim)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+           ON CONFLICT (issue_id, agent_id) DO NOTHING
+           RETURNING id""",
+        (issue_id, agent["id"], ballot.good, ballot.bad,
+         clean(ballot.rationale), model, ballot.prompt_version, claim), one=True)
+
+    # The constraint decides this, not a prior SELECT -- two concurrent
+    # submissions from the same agent cannot both slip through.
+    if not row:
+        raise HTTPException(409, "this agent has already voted on this issue")
+
+    if model != agent["model_name"]:
+        await q("UPDATE agents SET model_name = %s WHERE id = %s", (model, agent["id"]))
+
+    return {"vote_id": row["id"], "good": ballot.good, "bad": ballot.bad}
+
+
+@app.get("/healthz")
+async def healthz():
+    await q("SELECT 1")
+    return {"ok": True}
+
+
+# --- the website -------------------------------------------------------------
+# Server-rendered, no JavaScript. The pages read the same tables the API writes.
+
+MAX_BALLOTS_SHOWN = 200
+
+
+def quadrant(good: bool, bad: bool) -> str:
+    if good:
+        return "contested" if bad else "supported"
+    return "opposed" if bad else "irrelevant"
+
+
+PAGE_SIZE = 25
+
+# Whitelisted: the key arrives from the query string and the value is spliced
+# into SQL, so nothing here may ever be built from user input.
+SORTS = {
+    "new":           ("Newest",             "i.created_at DESC"),
+    "voted":         ("Most voted",         "i.ballots DESC, i.created_at DESC"),
+    "positive":      ("Most positive",
+                      "(i.supported - i.opposed) DESC, i.ballots DESC"),
+    "negative":      ("Most negative",
+                      "(i.opposed - i.supported) DESC, i.ballots DESC"),
+    # Two ways to be controversial: agents that each saw both good and bad in
+    # it, and agents that split into opposed camps. Count both.
+    "controversial": ("Most controversial",
+                      "(i.contested + LEAST(i.supported, i.opposed)) DESC, "
+                      "i.ballots DESC"),
+}
+
+WINDOWS = {"day": ("Today", "1 day"), "week": ("This week", "7 days"),
+           "month": ("This month", "30 days"), "all": ("All time", None)}
+
+
+async def browse(sort: str, window: str, status: str, page: int):
+    """One paginated listing. Every branch reads the counters on the issue row,
+    so sorting by sentiment costs the same as sorting by date."""
+    sort = sort if sort in SORTS else "new"
+    window = window if window in WINDOWS else "all"
+    status = status if status in ("open", "closed", "all") else "open"
+
+    # Removed questions are invisible everywhere a list is built. The issue
+    # page is the one exception: it shows a tombstone so a link does not rot.
+    clauses, params = ["i.removed_at IS NULL"], []
+    if status == "open":
+        clauses.append("i.closes_at > now()")
+    elif status == "closed":
+        clauses.append("i.closes_at <= now()")
+    if WINDOWS[window][1]:
+        clauses.append("i.created_at > now() - %s::interval")
+        params.append(WINDOWS[window][1])
+    where = " AND ".join(clauses) or "true"
+
+    total = (await q(f"SELECT count(*) AS n FROM issues i WHERE {where}",
+                     tuple(params), one=True))["n"]
+    pages = max(1, -(-total // PAGE_SIZE))          # ceiling division
+    page = min(max(page, 1), pages)
+
+    rows = await q(
+        f"""SELECT i.id, i.title, i.closes_at, i.created_at,
+                   u.display_name AS author,
+                   i.ballots, i.supported, i.contested, i.opposed, i.irrelevant,
+                   i.closes_at > now() AS is_open
+              FROM issues i JOIN users u ON u.id = i.author_id
+             WHERE {where}
+          ORDER BY {SORTS[sort][1]}
+             LIMIT %s OFFSET %s""",
+        tuple(params) + (PAGE_SIZE, (page - 1) * PAGE_SIZE))
+
+    return {"rows": rows, "page": page, "pages": pages, "total": total,
+            "sort": sort, "window": window, "status": status,
+            "sorts": SORTS, "windows": WINDOWS,
+            # A sort by date does not need a time window as well.
+            "show_windows": sort != "new"}
+
+
+@app.get("/", response_class=HTMLResponse)
+async def page_index(request: Request, sort: str = "new", window: str = "all",
+                     status: str = "open", page: int = 1):
+    view = await browse(sort, window, status, page)
+    view["user"] = await session_user(request)
+    return render(request, "index.html", view)
+
+
+@app.get("/i/{issue_id}", response_class=HTMLResponse)
+async def page_issue(request: Request, issue_id: int):
+    issue = await q(
+        """SELECT i.*, u.display_name AS author FROM issues i
+             JOIN users u ON u.id = i.author_id WHERE i.id = %s""",
+        (issue_id,), one=True)
+    if not issue:
+        raise HTTPException(404, "no such issue")
+
+    tally = issue          # the counters live on the row; no aggregate needed
+    by_model = await q(
+        """SELECT model_name, count(*) AS ballots,
+                  count(*) FILTER (WHERE good) AS good,
+                  count(*) FILTER (WHERE bad)  AS bad
+             FROM votes WHERE issue_id = %s
+            GROUP BY model_name ORDER BY ballots DESC, model_name""", (issue_id,))
+
+    # Bounded. With a thousand agents an unbounded list would render a
+    # thousand ballots into one page of HTML on every view.
+    votes = await q(
+        """SELECT v.id, v.good, v.bad, v.rationale, v.model_name,
+                  a.name AS agent, u.display_name AS operator
+             FROM votes v JOIN agents a ON a.id = v.agent_id
+                          JOIN users  u ON u.id = a.user_id
+            WHERE v.issue_id = %s ORDER BY v.created_at LIMIT %s""",
+        (issue_id, MAX_BALLOTS_SHOWN))
+    for v in votes:
+        v["quadrant"] = quadrant(v["good"], v["bad"])
+
+    viewer = await session_user(request)
+    # An author sees their own removed question, and an admin sees anyone's.
+    # Everyone else gets a tombstone: the link keeps working and says plainly
+    # that something was here and is not any more.
+    may_see = bool(viewer and (viewer["is_admin"]
+                               or viewer["id"] == issue["author_id"]))
+
+    return render(request, "issue.html", {
+        "user": viewer,
+        "issue": issue, "t": tally,
+        "by_model": by_model, "votes": votes,
+        "shown": len(votes), "capped": issue["ballots"] > len(votes),
+        "is_open": issue["closes_at"] > datetime.now(timezone.utc),
+        "removed": issue["removed_at"] is not None,
+        "may_see": may_see,
+        "may_moderate": bool(viewer and (viewer["is_admin"]
+                                         or viewer["id"] == issue["author_id"])),
+        "is_admin": bool(viewer and viewer["is_admin"]),
+        "err": request.query_params.get("err", ""),
+    })
+
+
+# --- moderation --------------------------------------------------------------
+
+async def _mod_target(request: Request, issue_id: int, need_admin: bool = False):
+    """Returns (viewer, issue). Authors may remove their own question; only
+    admins may restore or purge. A viewer with no business here gets 404
+    rather than 403, so the existence of the control is not advertised."""
+    user = await session_user(request)
+    issue = await q("SELECT * FROM issues WHERE id = %s", (issue_id,), one=True)
+    if not user or not issue:
+        raise HTTPException(404, "not found")
+    if need_admin and not user["is_admin"]:
+        raise HTTPException(404, "not found")
+    if not user["is_admin"] and issue["author_id"] != user["id"]:
+        raise HTTPException(404, "not found")
+    return user, issue
+
+
+@app.post("/i/{issue_id}/remove")
+async def page_remove_issue(request: Request, issue_id: int,
+                            reason: str = Form(""), csrf: str = Form("")):
+    check_csrf(request, csrf)
+    user, issue = await _mod_target(request, issue_id)
+    await q("""UPDATE issues SET removed_at = now(), removed_by = %s,
+                                 removed_reason = %s
+                WHERE id = %s AND removed_at IS NULL""",
+            (user["id"], clean(reason)[:500], issue_id))
+    await audit(user, "issue.remove", f"issue {issue_id}",
+                clean(reason)[:500] or "no reason given")
+    return RedirectResponse(f"/i/{issue_id}", status_code=303)
+
+
+@app.post("/i/{issue_id}/restore")
+async def page_restore_issue(request: Request, issue_id: int,
+                             csrf: str = Form("")):
+    check_csrf(request, csrf)
+    user, _ = await _mod_target(request, issue_id, need_admin=True)
+    await q("""UPDATE issues SET removed_at = NULL, removed_by = NULL,
+                                 removed_reason = '' WHERE id = %s""",
+            (issue_id,))
+    await audit(user, "issue.restore", f"issue {issue_id}")
+    return RedirectResponse(f"/i/{issue_id}", status_code=303)
+
+
+@app.post("/i/{issue_id}/purge")
+async def page_purge_issue(request: Request, issue_id: int,
+                           confirm: str = Form(""), csrf: str = Form("")):
+    """Actually deletes, along with its ballots. For content that must not
+    remain on the disk, and for erasure requests. The audit row is written
+    first, because after this there is nothing left to point at."""
+    check_csrf(request, csrf)
+    user, issue = await _mod_target(request, issue_id, need_admin=True)
+    if confirm.strip().lower() != "purge":
+        return RedirectResponse(f"/i/{issue_id}?err=confirm", status_code=303)
+    await audit(user, "issue.purge", f"issue {issue_id}", issue["title"][:200])
+    await q("DELETE FROM issues WHERE id = %s", (issue_id,))
+    return RedirectResponse("/?status=all", status_code=303)
+
+
+@app.post("/vote/{vote_id}/remove")
+async def page_remove_vote(request: Request, vote_id: int, csrf: str = Form("")):
+    """Ballots are deleted rather than hidden: the tally trigger decrements the
+    counters in the same transaction, so the quadrants stay true. A hidden but
+    still-counted ballot would be a lie on every page that shows a number."""
+    check_csrf(request, csrf)
+    user = await session_user(request)
+    if not user or not user["is_admin"]:
+        raise HTTPException(404, "not found")
+    row = await q("""DELETE FROM votes WHERE id = %s
+                     RETURNING issue_id, model_name, rationale""",
+                  (vote_id,), one=True)
+    if not row:
+        raise HTTPException(404, "not found")
+    await audit(user, "vote.remove", f"vote {vote_id}",
+                f"{row['model_name']}: {row['rationale'][:120]}")
+    return RedirectResponse(f"/i/{row['issue_id']}", status_code=303)
+
+
+@app.get("/new", response_class=HTMLResponse)
+async def page_new(request: Request):
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse("/login?next=/new", status_code=303)
+    return render(request, "new.html",
+                                      {"user": user, "form": {}, "error": None})
+
+
+@app.post("/new", response_class=HTMLResponse)
+async def page_new_submit(request: Request, title: str = Form(...),
+                          body: str = Form(...), days_open: int = Form(7),
+                          csrf: str = Form("")):
+    check_csrf(request, csrf)
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse("/login?next=/new", status_code=303)
+    if user["status"] != "approved":
+        return render(request, "new.html", {
+            "user": user, "form": {"title": title, "body": body},
+            "error": "Your account is still awaiting approval."}, status_code=403)
+    if err := bad_title(title):
+        return render(request, "new.html", {
+            "user": user, "form": {"title": title, "body": body},
+            "error": err}, status_code=422)
+
+    closes = datetime.now(timezone.utc) + timedelta(days=max(1, min(days_open, 90)))
+    row = await q(
+        """INSERT INTO issues (author_id, title, body, closes_at)
+           VALUES (%s, %s, %s, %s) RETURNING id""",
+        (user["id"], clean(title), clean(body), closes), one=True)
+    return RedirectResponse(f"/i/{row['id']}", status_code=303)
+
+
+# --- register, log in, log out ----------------------------------------------
+
+@app.get("/register", response_class=HTMLResponse)
+async def page_register(request: Request):
+    return render(request, "register.html",
+                                      {"user": await session_user(request),
+                                       "form": {}, "error": None})
+
+
+@app.post("/register", response_class=HTMLResponse)
+async def page_register_submit(request: Request, username: str = Form(...),
+                               email: str = Form(...), password: str = Form(...),
+                               note: str = Form(""),
+                               csrf: str = Form("")):
+    check_csrf(request, csrf)
+    if await throttle_signup(request):
+        return render(request, "register.html", {
+            "user": None, "form": {"username": username, "email": email},
+            "error": "Too many accounts created from here in the last hour. "
+                     "Try again later."}, status_code=429)
+    row, err = await create_user(username, email, password, note)
+    if err:
+        return render(request, "register.html", {
+            "user": None, "form": {"username": username, "email": email, "note": note},
+            "error": err}, status_code=409)
+
+    # Log them straight in. The account is pending, but they should be able to
+    # see that for themselves rather than wonder whether it worked.
+    return await _start_session(row["id"], "/account")
+
+
+async def _start_session(user_id: int, destination: str):
+    token = auth.new_session_token()
+    # Sessions are the one table that would otherwise grow forever without
+    # anybody noticing: nothing reads expired rows, so nothing deletes them.
+    # Sweeping on login keeps it self-maintaining with no cron job.
+    await q("DELETE FROM sessions WHERE expires_at < now()")
+    await q("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (%s, %s, %s)",
+            (auth.token_hash(token), user_id, auth.expiry()))
+    response = RedirectResponse(destination, status_code=303)
+    auth.set_cookie(response, token)
+    return response
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def page_login(request: Request, next: str = "/account"):
+    return render(request, "login.html",
+                                      {"user": None, "next": next, "error": None})
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def page_login_submit(request: Request, username: str = Form(...),
+                            password: str = Form(...), next: str = Form("/account"),
+                            csrf: str = Form("")):
+    check_csrf(request, csrf)
+    row = await q(
+        "SELECT id, password_hash FROM users WHERE lower(username) = lower(%s)",
+        (username.strip(),), one=True)
+
+    if not row or not auth.verify_password(password, row["password_hash"]):
+        # Deliberately the same message either way: telling an attacker that a
+        # username exists is a free gift.
+        return render(request, "login.html", {
+            "user": None, "next": next,
+            "error": "Wrong username or password."}, status_code=401)
+
+    if auth.needs_rehash(row["password_hash"]):
+        await q("UPDATE users SET password_hash = %s WHERE id = %s",
+                (auth.hash_password(password), row["id"]))
+
+    # Only ever redirect within this site: "next" comes from the query string.
+    dest = next if next.startswith("/") and not next.startswith("//") else "/account"
+    return await _start_session(row["id"], dest)
+
+
+@app.post("/logout")
+async def page_logout(request: Request,
+                      csrf: str = Form("")):
+    check_csrf(request, csrf)
+    token = request.cookies.get(auth.COOKIE)
+    if token:
+        await q("DELETE FROM sessions WHERE token_hash = %s", (auth.token_hash(token),))
+    response = RedirectResponse("/", status_code=303)
+    auth.clear_cookie(response)
+    return response
+
+
+# --- admin -------------------------------------------------------------------
+
+async def require_web_admin(request: Request):
+    """Returns the admin account, or None. A non-admin gets 404 rather than
+    403 from the caller, so the page's existence is not confirmed to someone
+    who has no business there."""
+    user = await session_user(request)
+    return user if user and user["is_admin"] else None
+
+
+async def _admin_page(request: Request, admin: dict, done: str | None = None,
+                      fresh_admin_token: str = ""):
+    pending = await q(
+        "SELECT id, username, email, note, created_at, email_verified "
+        "FROM users WHERE status = 'pending' ORDER BY created_at")
+    members = await q(
+        """SELECT u.id, u.username, u.email, u.status, u.is_admin,
+                  u.email_verified, a.name AS agent, a.model_name,
+                  (SELECT count(*) FROM votes v WHERE v.agent_id = a.id) AS ballots
+             FROM users u LEFT JOIN agents a ON a.user_id = u.id
+            WHERE u.status <> 'pending' ORDER BY u.id""")
+
+    prompt = await q("SELECT version, body, created_at FROM agent_prompts "
+                     "ORDER BY version DESC LIMIT 1", one=True)
+    usage = await q(
+        """SELECT coalesce(prompt_version::text, 'their own') AS v, count(*) AS n
+             FROM votes GROUP BY 1 ORDER BY n DESC LIMIT 6""")
+    log = await q("SELECT at, actor, action, target, detail FROM audit_log "
+                  "ORDER BY at DESC LIMIT 40")
+
+    return render(request, "admin.html", {
+        "user": admin, "pending": pending, "members": members, "done": done,
+        "prompt": prompt, "usage": usage, "log": log,
+        "fresh_admin_token": fresh_admin_token,
+        "env_token_live": not await config_get("admin_token_hash"),
+        "smtp": bool(SMTP_HOST), "site_url": SITE_URL})
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def page_admin(request: Request, done: str | None = None):
+    admin = await require_web_admin(request)
+    if not admin:
+        raise HTTPException(404, "not found")
+    return await _admin_page(request, admin, done)
+
+
+@app.post("/admin/verify-link", response_class=HTMLResponse)
+async def page_verify_link(request: Request, user_id: int = Form(...),
+                           csrf: str = Form("")):
+    """Re-issue a verification link. With SMTP configured it is emailed; with
+    no mail server it is shown here to be passed on by hand."""
+    check_csrf(request, csrf)
+    admin = await require_web_admin(request)
+    if not admin:
+        raise HTTPException(404, "not found")
+    link = await issue_verification(user_id)
+    await audit(admin, "email.verification.reissue", f"user {user_id}")
+    return await _admin_page(request, admin, done="verify:" + link)
+
+
+@app.post("/admin/approve")
+async def page_admin_approve(request: Request, user_id: int = Form(...),
+                             agent_name: str = Form(""),
+                             csrf: str = Form("")):
+    check_csrf(request, csrf)
+    if not await require_web_admin(request):
+        raise HTTPException(404, "not found")
+    admin = await session_user(request)
+    ok = await approve_user(user_id, agent_name)
+    if ok:
+        await audit(admin, "account.approve", f"user {user_id}", agent_name)
+    return RedirectResponse(
+        f"/admin?done={'approved' if ok else 'nothing-to-do'}", status_code=303)
+
+
+@app.post("/admin/prompt")
+async def page_admin_prompt(request: Request, body: str = Form(...),
+                            csrf: str = Form("")):
+    check_csrf(request, csrf)
+    admin = await require_web_admin(request)
+    if not admin:
+        raise HTTPException(404, "not found")
+    # Append-only. Old ballots keep pointing at the version that produced them,
+    # so the record of what was asked stays true after the prompt changes.
+    row = await q("INSERT INTO agent_prompts (body, author_id) VALUES (%s, %s) "
+                  "RETURNING version", (body.strip(), admin["id"]), one=True)
+    await audit(admin, "prompt.publish", f"version {row['version']}")
+    return RedirectResponse("/admin?done=prompt", status_code=303)
+
+
+@app.post("/admin/reject")
+async def page_admin_reject(request: Request, user_id: int = Form(...),
+                            csrf: str = Form("")):
+    check_csrf(request, csrf)
+    if not await require_web_admin(request):
+        raise HTTPException(404, "not found")
+    # Rejected, not deleted: the row is the record of having decided, and the
+    # email stays taken so the same person cannot quietly reapply.
+    await q("UPDATE users SET status = 'rejected' WHERE id = %s AND status = 'pending'",
+            (user_id,))
+    await audit(await session_user(request), "account.reject", f"user {user_id}")
+    return RedirectResponse("/admin?done=rejected", status_code=303)
+
+
+@app.post("/admin/admin-token", response_class=HTMLResponse)
+async def page_rotate_admin_token(request: Request, csrf: str = Form("")):
+    """Rotate the API root credential. Shown once; only a hash is kept. The
+    first rotation also permanently retires the ADMIN_TOKEN from .env."""
+    check_csrf(request, csrf)
+    admin = await require_web_admin(request)
+    if not admin:
+        raise HTTPException(404, "not found")
+    token = secrets.token_urlsafe(32)
+    await config_set("admin_token_hash", _hash(token))
+    await audit(admin, "admin_token.rotate")
+    return await _admin_page(request, admin, fresh_admin_token=token)
+
+
+# --- account -----------------------------------------------------------------
+
+async def _account_page(request: Request, user: dict, fresh_token: str = ""):
+    agent = await q("SELECT * FROM agents WHERE user_id = %s", (user["id"],), one=True)
+    voted = await q("SELECT count(*) AS n FROM votes WHERE agent_id = %s",
+                    (agent["id"],), one=True) if agent else {"n": 0}
+    return render(request, "account.html", {
+        "user": user, "agent": agent, "voted": voted["n"],
+        "fresh_token": fresh_token})
+
+
+@app.get("/account", response_class=HTMLResponse)
+async def page_account(request: Request):
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return await _account_page(request, user)
+
+
+@app.post("/account/token", response_class=HTMLResponse)
+async def page_rotate_token(request: Request,
+                            csrf: str = Form("")):
+    """Rotate the agent token. The old one stops working immediately, so any
+    client still holding it starts getting 401s until it is updated."""
+    check_csrf(request, csrf)
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    agent = await q("SELECT id FROM agents WHERE user_id = %s", (user["id"],), one=True)
+    if not agent:
+        return RedirectResponse("/account", status_code=303)
+
+    token = secrets.token_urlsafe(32)
+    # Only the hash is kept. The plaintext exists for exactly one page render
+    # and is then unrecoverable -- which is affordable precisely because
+    # generating another is one click away.
+    await q("UPDATE agents SET token_hash = %s WHERE id = %s",
+            (_hash(token), agent["id"]))
+    await audit(user, "agent.token.rotate", f"agent {agent['id']}")
+    return await _account_page(request, user, fresh_token=token)

@@ -1,0 +1,39 @@
+# One command, nothing installed locally but Docker:
+#
+#   docker compose -f docker-compose.test.yml run --rm tests
+#   docker compose -f docker-compose.test.yml down -v
+#
+# A scratch database on a tmpfs -- it is created, truncated a few hundred
+# times and thrown away, so durability is exactly what we do not want. It
+# never touches the volume the real site uses.
+
+services:
+  testdb:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=vote
+      - POSTGRES_PASSWORD=test
+      - POSTGRES_DB=votetest
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: >
+      postgres -c fsync=off -c full_page_writes=off
+               -c synchronous_commit=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vote -d votetest"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  tests:
+    build: .
+    environment:
+      - TEST_DATABASE_URL=postgresql://vote:test@testdb:5432/votetest
+    depends_on:
+      testdb:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    working_dir: /app
+    entrypoint: ["sh", "-c"]
+    command: ["pip install --no-cache-dir -q pytest pytest-asyncio && pytest $${PYTEST_ARGS}"]

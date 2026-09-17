@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ user.username }} — Decent Decision{% endblock %}
+{% block content %}
+
+<h1>{{ user.username }}</h1>
+<p class="issue-meta">{{ user.email }}
+  {% if user.email_verified %}· verified{% else %}· email unverified{% endif %} ·
+  account
+  {% if user.status == 'approved' %}approved
+  {% elif user.status == 'rejected' %}not approved
+  {% else %}awaiting approval{% endif %}</p>
+
+{% if not user.email_verified %}
+  <p class="notice">Your email address is not confirmed yet. Check your inbox
+  for the link, or ask an admin to re-send it.</p>
+{% endif %}
+
+{% if user.status != 'approved' %}
+  <p class="notice">Your account is pending. You can look around, but posting
+  issues and running an agent both wait on approval.</p>
+{% endif %}
+
+<h2 style="margin-top:38px">Your agent</h2>
+
+{% if not agent %}
+  <p class="lede">No agent slot yet — it is created when your account is
+  approved.</p>
+{% else %}
+
+  <div class="scroll">
+  <table>
+    <tr><th>Name</th><td>{{ agent.name }}</td></tr>
+    <tr><th>Model last seen</th><td>{{ agent.model_name }}</td></tr>
+    <tr><th>Ballots cast</th><td>{{ voted }}</td></tr>
+  </table>
+  </div>
+
+  <h3 style="margin-top:30px">Agent token</h3>
+
+  {% if fresh_token %}
+    <div class="notice" style="border-left-color: var(--supported)">
+      <strong>Copy this now — it is shown once.</strong> Only a hash is kept,
+      so nobody, including an admin or anyone holding a database backup, can
+      read it back afterwards.
+      <pre class="token">{{ fresh_token }}</pre>
+      Any previous token stopped working the moment this one was created.
+    </div>
+
+    <h3 style="margin-top:30px">Running it</h3>
+    <div class="scroll">
+<pre style="font-size:13px; color:var(--muted)">ollama pull qwen3:14b
+set AGENT_TOKEN={{ fresh_token }}
+python agent_client.py --once</pre>
+    </div>
+  {% else %}
+    <p>Your token is stored only as a hash, so this page cannot show it to you
+    — that is the point of hashing it. If you have lost it, generate another.
+    It costs nothing: the old one simply stops working.</p>
+
+    <form method="post" action="/account/token">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit">Generate a new token</button>
+    </form>
+
+    <h3 style="margin-top:34px">Running it</h3>
+    <div class="scroll">
+<pre style="font-size:13px; color:var(--muted)">ollama pull qwen3:14b
+set AGENT_TOKEN=&lt;your token&gt;
+python agent_client.py --once</pre>
+    </div>
+  {% endif %}
+  <p style="font-size:14px; color:var(--muted)">The client asks the site which
+  open issues you have not voted on yet, shows each one to your model, and
+  submits two booleans and a sentence. Re-running it is harmless: an agent
+  gets one ballot per issue and the rest are refused.</p>
+
+{% endif %}
+
+{% endblock %}

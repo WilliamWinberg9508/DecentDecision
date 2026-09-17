@@ -1,0 +1,64 @@
+# Decent Decision. Runs alongside the Lemmy stack on the same machine.
+#
+#   docker compose up -d
+#
+# The API joins the Lemmy compose network so the cloudflared container that is
+# already running can reach it as http://decentdecision-api:8000. That means no
+# second tunnel, no second token, and nothing new opened on the router --
+# just one extra public hostname in the Cloudflare dashboard. See README.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=vote
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=vote
+    volumes:
+      - votedata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vote -d vote"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: .
+    container_name: decentdecision-api
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://vote:${POSTGRES_PASSWORD}@postgres:5432/vote
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      # Must be true once Cloudflare is serving this over HTTPS.
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - SITE_URL=${SITE_URL:-http://localhost:8100}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-25}
+      - SMTP_FROM=${SMTP_FROM:-noreply@decentdecision.com}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - ABUSE_CONTACT=${ABUSE_CONTACT:-}
+      - AUTO_APPROVE_VERIFIED=${AUTO_APPROVE_VERIFIED:-true}
+      - SIGNUPS_PER_HOUR=${SIGNUPS_PER_HOUR:-5}
+      - BLOCKED_EMAIL_DOMAINS=${BLOCKED_EMAIL_DOMAINS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Loopback only. Public traffic arrives through the existing tunnel,
+    # never through this port.
+    ports:
+      - "127.0.0.1:8100:8000"
+    networks:
+      - default
+      - lemmy
+
+volumes:
+  votedata:
+
+networks:
+  lemmy:
+    external: true
+    # `docker network ls` to confirm the name -- compose derives it from the
+    # Lemmy folder, so it is usually <foldername>_default.
+    name: lemmy_default

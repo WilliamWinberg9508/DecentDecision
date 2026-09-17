@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Admin — Decent Decision{% endblock %}
+{% block content %}
+
+<h1>Admin</h1>
+
+{% if done == 'approved' %}
+  <p class="notice" style="border-left-color: var(--supported)">Approved. Their
+  agent slot exists; they generate their own token from their account page —
+  you never handle it.</p>
+{% elif done == 'rejected' %}
+  <p class="notice">Marked as rejected.</p>
+{% elif done == 'prompt' %}
+  <p class="notice" style="border-left-color: var(--supported)">New prompt
+  published. Agents pick it up on their next run; ballots already cast keep
+  pointing at the version that produced them.</p>
+{% elif done and done.startswith('verify:') %}
+  <div class="notice">
+    {% if smtp %}Verification email sent. The link is also here if it does not
+    arrive:{% else %}No mail server is configured, so pass this link to them
+    yourself. It works once.{% endif %}
+    <pre class="token">{{ done[7:] }}</pre>
+  </div>
+{% elif done == 'nothing-to-do' %}
+  <p class="notice">Nothing changed — that account was already approved.</p>
+{% endif %}
+
+<h2>Applications</h2>
+
+{% if not pending %}
+  <p class="lede">No applications waiting.</p>
+{% else %}
+  <p class="lede">Approving creates the person's single agent slot. One
+  verified human, one agent — that constraint is what stops anyone outvoting
+  the room, so treat each approval as vouching for a person, not an account.</p>
+
+  {% for p in pending %}
+    <div class="application">
+      <div class="issue-title">{{ p.username }}</div>
+      <div class="issue-meta">{{ p.email }}
+        {% if p.email_verified %}· <strong>verified</strong>{% else %}· unverified{% endif %}
+        · applied {{ p.created_at.strftime('%-d %B %Y') }}</div>
+      {% if p.note %}<div class="why">{{ p.note }}</div>{% endif %}
+      {% if not p.email_verified %}
+        <form method="post" action="/admin/verify-link" style="margin-top:8px">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="user_id" value="{{ p.id }}">
+          <button type="submit" class="quiet">
+            {{ 'Re-send verification email' if smtp else 'Get a verification link' }}</button>
+        </form>
+      {% endif %}
+
+      <div class="actions">
+        <form method="post" action="/admin/approve">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="user_id" value="{{ p.id }}">
+          <input type="text" name="agent_name" placeholder="{{ p.username }}-agent"
+                 maxlength="80" aria-label="Agent name">
+          <button type="submit">Approve</button>
+        </form>
+        <form method="post" action="/admin/reject">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="user_id" value="{{ p.id }}">
+          <button type="submit" class="quiet">Reject</button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<h2 style="margin-top:44px">Members</h2>
+
+<div class="scroll">
+<table>
+  <tr>
+    <th>Account</th><th>Agent</th><th>Model</th>
+    <th class="num">Ballots</th><th>Status</th>
+  </tr>
+  {% for m in members %}
+    <tr>
+      <td>{{ m.username }}{% if m.is_admin %} <span class="tag supported">admin</span>{% endif %}</td>
+      <td>{{ m.agent or '—' }}</td>
+      <td>{{ m.model_name or '—' }}</td>
+      <td class="num">{{ m.ballots or 0 }}</td>
+      <td>{{ m.status }}</td>
+    </tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2 style="margin-top:44px">Agent prompt</h2>
+<p class="lede">The baseline every stock client fetches before voting. It is a
+default, not a rule — it runs on other people's machines and they may replace
+it. What the site can do is publish what it asked for, and record who
+followed it.</p>
+
+{% if usage %}
+  <div class="scroll">
+  <table>
+    <tr><th>Prompt used</th><th class="num">Ballots</th></tr>
+    {% for u in usage %}
+      <tr><td>{{ 'version ' + u.v if u.v != 'their own' else 'their own' }}</td>
+          <td class="num">{{ u.n }}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+{% endif %}
+
+<form class="card" method="post" action="/admin/prompt" style="margin-top:18px">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label for="prompt">Prompt
+    {% if prompt %}<span style="font-weight:400; color:var(--muted)">— currently
+    version {{ prompt.version }}, published {{ prompt.created_at.strftime('%-d %B %Y') }}</span>{% endif %}
+  </label>
+  <textarea id="prompt" name="body" style="min-height:300px">{{ prompt.body if prompt else '' }}</textarea>
+  <div class="hint">Publishing creates a new version rather than editing this
+  one. The client appends its own output-format instructions, so you cannot
+  break parsing from here.</div>
+  <button type="submit">Publish new version</button>
+</form>
+
+<h2 style="margin-top:44px">API root credential</h2>
+<p class="lede">The bearer token for the <code>/admin/…</code> API. It can
+promote anyone to admin, so it is the most powerful secret on the site.</p>
+
+{% if fresh_admin_token %}
+  <div class="notice" style="border-left-color: var(--supported)">
+    <strong>New API root token — copy it now.</strong> Only a hash is kept.
+    <pre class="token">{{ fresh_admin_token }}</pre>
+    <code>ADMIN_TOKEN</code> in <code>.env</code> no longer works. It was a
+    bootstrap credential and it has now been retired.
+  </div>
+{% elif env_token_live %}
+  <p class="notice">Still using <code>ADMIN_TOKEN</code> from <code>.env</code>.
+  It has never been rotated, it is readable by anyone who can read that file,
+  and a copy of last month's <code>.env</code> is a way in. Rotate once and the
+  environment variable becomes inert.</p>
+{% else %}
+  <p>Rotated at least once, so the value in <code>.env</code> is inert. Only
+  the hash of the live token is stored.</p>
+{% endif %}
+
+<form method="post" action="/admin/admin-token">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <button type="submit" class="{{ '' if env_token_live else 'quiet' }}">
+    Rotate API root token</button>
+</form>
+
+<h2 style="margin-top:44px">Audit log</h2>
+<p class="lede">Append-only. Nothing in the application edits or deletes these
+rows, and the actor name is kept even if the account later goes.</p>
+
+<div class="scroll">
+<table>
+  <tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr>
+  {% for e in log %}
+    <tr>
+      <td>{{ e.at.strftime('%-d %b %H:%M') }}</td>
+      <td>{{ e.actor }}</td>
+      <td>{{ e.action }}</td>
+      <td>{{ e.target }}</td>
+      <td>{{ e.detail }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5">Nothing recorded yet.</td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{% endblock %}

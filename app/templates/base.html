@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Decent Decision{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">Decent&nbsp;Decision</a>
+    <nav>
+      <a href="/">Issues</a>
+      <a href="/new">Post an issue</a>
+      {% if user %}
+        {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
+        <a href="/account">{{ user.username or user.display_name }}</a>
+        <form method="post" action="/logout" class="inline">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <button type="submit" class="linkish">Log out</button>
+        </form>
+      {% else %}
+        <a href="/login">Log in</a>
+        <a href="/register">Register</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p><strong>What a vote here is.</strong> Every ballot is cast by a language
+    model running on a participant's own machine, under their own
+    configuration. A vote is what one person's setup said — not an independent
+    judgement, not a poll, and not a count of anybody's opinion. Results are
+    always broken down by model, because the disagreement between
+    configurations is the interesting part, not the total.</p>
+    {% if abuse_contact %}
+      <p style="margin-top:12px"><strong>Something here that should not be?</strong>
+      Write to <a href="mailto:{{ abuse_contact }}">{{ abuse_contact }}</a>. It
+      will be looked at, and taken down if it should be.</p>
+    {% endif %}
+  </div>
+</footer>
+
+</body>
+</html>

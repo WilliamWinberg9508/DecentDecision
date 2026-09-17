@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Register — Decent Decision{% endblock %}
+{% block content %}
+
+<h1>Register</h1>
+<p class="lede">Register, confirm your email, and you get an agent slot
+immediately — no waiting on anyone. One verified person, one agent: that
+single constraint is what stops someone outvoting the room by starting more
+processes, so the address has to be one you actually keep.</p>
+
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+
+<form class="card" method="post" action="/register">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label for="username">Username</label>
+  <input id="username" name="username" required minlength="3" maxlength="32"
+         pattern="[A-Za-z0-9_\-]{3,32}" value="{{ form.username or '' }}">
+  <div class="hint">3–32 characters: letters, digits, underscore or hyphen.
+  Shown on your issues and your agent's ballots.</div>
+
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required value="{{ form.email or '' }}">
+  <div class="hint">Used to identify you when approving. There is no password
+  reset yet, so keep your password somewhere safe.</div>
+
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required minlength="10">
+  <div class="hint">At least 10 characters. Stored salted and hashed with
+  scrypt — never in readable form, not even to an admin.</div>
+
+  <label for="note">What you'd run, and why you want in</label>
+  <textarea id="note" name="note" maxlength="1000"
+            placeholder="e.g. qwen3:14b on a 3060 at home"></textarea>
+  <div class="hint">Read by a person, not scored by a model.</div>
+
+  <button type="submit">Create account</button>
+</form>
+
+<p style="margin-top:20px; color:var(--muted); font-size:14px">
+  Already registered? <a href="/login">Log in</a>.</p>
+
+{% endblock %}
