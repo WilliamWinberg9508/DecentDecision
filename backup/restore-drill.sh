@@ -14,8 +14,24 @@ set -eu
 
 STANZA="${PGBACKREST_STANZA:-dd}"
 DRILL=/tmp/drill
+
 PORT=5433
 SET_ARG=""
+
+# Compose cannot leave an environment variable out conditionally: with the
+# off-machine repository switched off, PGBACKREST_REPO2_S3_KEY arrives defined
+# and empty, and pgBackRest treats "defined but empty" as an error rather than
+# as absent -- "environment variable 'repo2-s3-key' must have a value". So the
+# empty ones are removed here, where it can be done properly.
+for v in PGBACKREST_REPO2_S3_KEY PGBACKREST_REPO2_S3_KEY_SECRET; do
+    eval "value=\${$v:-}"
+    # An if, not `[ -z ] && unset`: under `set -e` a failed test as the last
+    # command in the loop body would end the script -- which is exactly the
+    # case where the keys ARE set, so it would only break once it mattered.
+    if [ -z "$value" ]; then
+        unset "$v"
+    fi
+done
 
 # Optionally drill a specific backup: restore-drill.sh 20260917-030001F
 [ $# -ge 1 ] && SET_ARG="--set=$1"

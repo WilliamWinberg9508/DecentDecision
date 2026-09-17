@@ -14,6 +14,21 @@ FULL_DOW="${BACKUP_FULL_DOW:-0}"        # 0 = Sunday
 HOUR="${BACKUP_HOUR:-3}"                # container clock, which is UTC
 MARKER="/var/lib/pgbackrest/.last-backup"
 
+# Compose cannot leave an environment variable out conditionally: with the
+# off-machine repository switched off, PGBACKREST_REPO2_S3_KEY arrives defined
+# and empty, and pgBackRest treats "defined but empty" as an error rather than
+# as absent -- "environment variable 'repo2-s3-key' must have a value". So the
+# empty ones are removed here, where it can be done properly.
+for v in PGBACKREST_REPO2_S3_KEY PGBACKREST_REPO2_S3_KEY_SECRET; do
+    eval "value=\${$v:-}"
+    # An if, not `[ -z ] && unset`: under `set -e` a failed test as the last
+    # command in the loop body would end the script -- which is exactly the
+    # case where the keys ARE set, so it would only break once it mattered.
+    if [ -z "$value" ]; then
+        unset "$v"
+    fi
+done
+
 run() {
     echo "--- $(date -Iseconds) $1 backup ---"
     if pgbackrest --stanza="$STANZA" --type="$1" backup; then

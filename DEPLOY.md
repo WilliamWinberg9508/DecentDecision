@@ -84,6 +84,33 @@ That restores the backup into a scratch directory inside the sidecar, starts a
 second Postgres on a spare port, counts the rows, checks that the tallies still
 agree with the ballots, and throws it away. It never touches the live database.
 
+### If the backup container keeps restarting
+
+```
+backup-1 | P00 ERROR: [032]: environment variable 'repo2-s3-key' must have a value
+```
+
+Fixed in the scripts, which are bind-mounted, so it needs no rebuild:
+
+```powershell
+docker compose restart backup
+```
+
+The cause is worth knowing if you ever add another pgBackRest option: compose
+cannot leave a variable out conditionally, so with the off-machine repository
+switched off `PGBACKREST_REPO2_S3_KEY` arrives defined and empty — and
+pgBackRest treats defined-but-empty as an error rather than as absent. Both
+scripts now remove empty `PGBACKREST_*` variables before calling it.
+
+While the sidecar was crashing it never created the stanza, so `archive_command`
+in the database had nothing to push to. It resumes by itself once the stanza
+exists; this shows whether it has:
+
+```powershell
+docker compose logs --tail 20 postgres | Select-String archive
+docker compose exec backup pgbackrest --stanza=dd check
+```
+
 ## 5. Look at the site
 
 <http://localhost:8100> — open a question, and the *Discuss this* button is
