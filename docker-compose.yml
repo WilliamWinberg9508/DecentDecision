@@ -44,6 +44,12 @@ services:
   # Weekly full, daily incremental, and the restore drill lives here too:
   #   docker compose exec backup /backup/restore-drill.sh
   backup:
+    # Same image as the database, built here too rather than only referenced:
+    # `docker compose pull` would otherwise try to fetch a tag that only ever
+    # exists locally. The build is cached, so this costs nothing.
+    build:
+      context: .
+      dockerfile: backup/Dockerfile.postgres
     image: decentdecision-postgres:16
     restart: always
     user: postgres

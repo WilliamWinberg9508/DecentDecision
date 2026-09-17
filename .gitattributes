@@ -1,0 +1,9 @@
+# The backup sidecar runs these with sh inside a Linux container. A checkout
+# on Windows that turned them into CRLF would fail with errors that look like
+# a missing file rather than a line ending.
+*.sh text eol=lf
+*.conf text eol=lf
+Dockerfile* text eol=lf
+*.sql text eol=lf
+*.png binary
+*.svg text eol=lf
