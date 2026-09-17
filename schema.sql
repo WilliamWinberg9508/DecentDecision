@@ -307,3 +307,45 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS sessions_user_idx   ON sessions (user_id);
 CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions (expires_at);
+
+
+-- --- login rate limiting -----------------------------------------------------
+-- Signup was throttled from the start; login was not, which left the password
+-- form as an unlimited oracle for offline-free guessing. Two windows, because
+-- they defend different things:
+--
+--   ip:<hash>    protects the server. scrypt is deliberately expensive, so an
+--                unthrottled login form is also a cheap way to burn every CPU
+--                the site has. This window is checked BEFORE any hashing.
+--
+--   user:<name>  protects one account against distributed guessing. It cannot
+--                lock the real owner out: see page_login_submit -- when the
+--                presented password is correct the account window is ignored,
+--                so an attacker hammering your username can never keep you out
+--                of your own account. That only holds because the ip window
+--                already caps the work an attacker can cause.
+--
+-- Only failures are recorded, and only as a salted hash of the subject. Rows
+-- are swept on every attempt, so this stays a rate limiter rather than a log
+-- of who tried to log in and from where.
+CREATE TABLE IF NOT EXISTS login_throttle (
+    subject text        NOT NULL,
+    at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS login_throttle_idx ON login_throttle (subject, at);
+
+
+-- --- password reset ----------------------------------------------------------
+-- A separate table rather than a column on users, so a reset can expire and be
+-- single-use without teaching the users table about either. The token itself is
+-- never stored: read access to this table must not be a way to take an account.
+CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash text        PRIMARY KEY,
+    user_id    bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    used_at    timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS password_resets_user_idx ON password_resets (user_id);

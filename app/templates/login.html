@@ -5,6 +5,10 @@
 <h1>Log in</h1>
 
 {% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if request.query_params.get('reset') %}
+  <p class="notice">Your password has been changed. Log in with the new one —
+  any other device that was signed in has been signed out.</p>
+{% endif %}
 
 <form class="card" method="post" action="/login">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -20,6 +24,7 @@
 </form>
 
 <p style="margin-top:20px; color:var(--muted); font-size:14px">
-  No account yet? <a href="/register">Register</a>.</p>
+  No account yet? <a href="/register">Register</a>.
+  <br>Forgotten your password? <a href="/forgot">Reset it</a>.</p>
 
 {% endblock %}

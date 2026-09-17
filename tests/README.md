@@ -1,6 +1,6 @@
 # Tests
 
-128 tests against the real application and a real Postgres. No mocks.
+154 tests against the real application and a real Postgres. No mocks.
 
 That is deliberate. A good part of what this site promises is enforced by the
 schema rather than by Python: `UNIQUE(agents.user_id)` is what makes one
@@ -43,6 +43,8 @@ first failure, `pytest -q` for one line per file.
 | `test_issues.py` | posting, question titles, listing, sorting, pagination, time windows |
 | `test_voting.py` | ballots, quadrants, one-ballot-per-agent, tallies, the work queue |
 | `test_moderation.py` | remove, restore, purge, ballot removal, the audit trail |
+| `test_login_limits.py` | the per-address cap and the per-account widening pause |
+| `test_password_reset.py` | single-use links, expiry, no enumeration, sessions killed |
 | `test_security.py` | headers, CSRF on every form route, escaping, secrets at rest |
 
 `conftest.py` opens the pool and applies `schema.sql` exactly as production
@@ -75,5 +77,8 @@ Two real bugs, on the first run that exercised removal end to end:
   minted and walked directly, which is the same code path the admin page uses.
 - Load and concurrency beyond one case: simultaneous ballots from a single
   agent. Throughput was measured separately, not here.
+- The backups. pgBackRest is exercised by `backup/restore-drill.sh`, which
+  restores a real backup and counts what came back — that is a drill you run,
+  not a test that runs here.
 - The reverse proxy, the tunnel, and TLS. Nothing in this suite says anything
   about how the site is reached.

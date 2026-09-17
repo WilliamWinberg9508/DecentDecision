@@ -339,6 +339,75 @@ async def throttle_signup(request: Request) -> bool:
     return False
 
 
+# --- login rate limiting -----------------------------------------------------
+# Two limits, defending two different things.
+#
+# Per source address: a hard cap. scrypt is deliberately expensive, so an
+# unthrottled login form is also a cheap way to spend every CPU the site has.
+# This one is checked before any hashing happens.
+#
+# Per account: a widening pause rather than a lock. After a few failures each
+# further attempt has to wait, doubling up to a minute -- which cuts a
+# distributed guessing run to about sixty tries an hour, while leaving the real
+# owner at most a minute from getting in. A hard account lock would hand anyone
+# who knows your username a way to keep you out of your own site, which for a
+# one-admin instance is a worse bug than the one it fixes.
+
+LOGIN_FAILS_PER_IP = int(os.environ.get("LOGIN_FAILS_PER_IP", "20"))
+LOGIN_FAILS_PER_ACCOUNT = int(os.environ.get("LOGIN_FAILS_PER_ACCOUNT", "8"))
+LOGIN_MAX_PAUSE = 60
+LOGIN_WINDOW = "15 minutes"
+
+
+async def _subject_hash(kind: str, value: str) -> str:
+    """Salted, so the table cannot be read back as a list of who tried to log
+    in and from where."""
+    salt = await config_get("ip_salt")
+    if not salt:
+        salt = secrets.token_urlsafe(16)
+        await config_set("ip_salt", salt)
+    return _hash(f"{salt}{kind}:{value.strip().lower()}")
+
+
+async def login_gate(request: Request, username: str) -> str | None:
+    """A message to show instead of checking the password, or None to proceed.
+
+    Read-only: nothing is recorded here, so a correct password never counts
+    against anyone."""
+    await q("DELETE FROM login_throttle WHERE at < now() - %s::interval",
+            (LOGIN_WINDOW,))
+    ip_key = await _subject_hash("ip", client_ip(request))
+    user_key = await _subject_hash("user", username)
+
+    rows = await q(
+        """SELECT subject, count(*) AS n,
+                  extract(epoch FROM now() - max(at)) AS since
+             FROM login_throttle
+            WHERE subject = ANY(%s) AND at > now() - %s::interval
+         GROUP BY subject""", ([ip_key, user_key], LOGIN_WINDOW))
+    seen = {r["subject"]: r for r in rows}
+
+    if seen.get(ip_key, {}).get("n", 0) >= LOGIN_FAILS_PER_IP:
+        return ("Too many failed sign-ins from this connection. "
+                "Wait a few minutes and try again.")
+
+    account = seen.get(user_key)
+    if account and account["n"] >= LOGIN_FAILS_PER_ACCOUNT:
+        pause = min(LOGIN_MAX_PAUSE,
+                    2 ** (account["n"] - LOGIN_FAILS_PER_ACCOUNT))
+        waited = float(account["since"])
+        if waited < pause:
+            return (f"Too many failed attempts for this account. "
+                    f"Try again in {max(1, int(pause - waited))} seconds.")
+    return None
+
+
+async def record_login_failure(request: Request, username: str) -> None:
+    for kind, value in (("ip", client_ip(request)), ("user", username)):
+        await q("INSERT INTO login_throttle (subject) VALUES (%s)",
+                (await _subject_hash(kind, value),))
+
+
 async def create_user(username: str, email: str, password: str, note: str = ""):
     """Returns (row, error). Registration creates a *pending* account: people
     can sign in immediately and see their status, but cannot post or vote
@@ -391,6 +460,27 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SITE_URL = os.environ.get("SITE_URL", "http://localhost:8100").rstrip("/")
 
 
+def send_mail(to: str, subject: str, body: str) -> None:
+    """Best effort, and deliberately so: mail is the least reliable thing this
+    application touches, and no signup or reset should fail because a relay was
+    down. The link exists in the database either way."""
+    try:
+        import smtplib
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = os.environ.get("SMTP_FROM", "noreply@decentdecision.com")
+        msg["To"] = to
+        msg.set_content(body)
+        with smtplib.SMTP(SMTP_HOST, int(os.environ.get("SMTP_PORT", 25))) as srv:
+            if os.environ.get("SMTP_USER"):
+                srv.starttls()
+                srv.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
+            srv.send_message(msg)
+    except Exception as exc:
+        print(f"mail to {to} failed: {exc}", flush=True)
+
+
 async def issue_verification(user_id: int) -> str:
     """Mint a verification link. Sends it if SMTP is configured; otherwise the
     admin page shows it, so the mechanism works either way and the claim it
@@ -402,21 +492,8 @@ async def issue_verification(user_id: int) -> str:
 
     if SMTP_HOST:
         row = await q("SELECT email FROM users WHERE id = %s", (user_id,), one=True)
-        try:
-            import smtplib
-            from email.message import EmailMessage
-            msg = EmailMessage()
-            msg["Subject"] = "Confirm your email address"
-            msg["From"] = os.environ.get("SMTP_FROM", "noreply@decentdecision.com")
-            msg["To"] = row["email"]
-            msg.set_content(f"Open this link to confirm your address:\n\n{link}\n")
-            with smtplib.SMTP(SMTP_HOST, int(os.environ.get("SMTP_PORT", 25))) as srv:
-                if os.environ.get("SMTP_USER"):
-                    srv.starttls()
-                    srv.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
-                srv.send_message(msg)
-        except Exception as exc:                   # never fail a signup on mail
-            print(f"verification mail failed: {exc}")
+        send_mail(row["email"], "Confirm your email address",
+                  f"Open this link to confirm your address:\n\n{link}\n")
     return link
 
 
@@ -1003,11 +1080,19 @@ async def page_login_submit(request: Request, username: str = Form(...),
                             password: str = Form(...), next: str = Form("/account"),
                             csrf: str = Form("")):
     check_csrf(request, csrf)
+
+    # Before the lookup and before any hashing: a rate limiter that only kicks
+    # in after the expensive work has already been done protects nothing.
+    if blocked := await login_gate(request, username):
+        return render(request, "login.html", {
+            "user": None, "next": next, "error": blocked}, status_code=429)
+
     row = await q(
         "SELECT id, password_hash FROM users WHERE lower(username) = lower(%s)",
         (username.strip(),), one=True)
 
     if not row or not auth.verify_password(password, row["password_hash"]):
+        await record_login_failure(request, username)
         # Deliberately the same message either way: telling an attacker that a
         # username exists is a free gift.
         return render(request, "login.html", {
@@ -1033,6 +1118,134 @@ async def page_logout(request: Request,
     response = RedirectResponse("/", status_code=303)
     auth.clear_cookie(response)
     return response
+
+
+# --- forgotten passwords -----------------------------------------------------
+# Short-lived, single use, and stored only as a hash: the same three properties
+# as every other token here, for the same reason -- a reset link is a password
+# for as long as it is valid, so the database must not contain a working one.
+
+RESET_TTL_MINUTES = int(os.environ.get("RESET_TTL_MINUTES", "60"))
+RESETS_PER_IP = 5
+
+
+async def issue_password_reset(user: dict) -> str:
+    token = secrets.token_urlsafe(32)
+    await q("""INSERT INTO password_resets (token_hash, user_id, expires_at)
+               VALUES (%s, %s, now() + %s::interval)""",
+            (_hash(token), user["id"], f"{RESET_TTL_MINUTES} minutes"))
+    link = f"{SITE_URL}/reset/{token}"
+
+    if SMTP_HOST:
+        send_mail(user["email"], "Reset your password",
+                  f"Someone asked to reset the password for {user['username']}.\n\n"
+                  f"{link}\n\nThe link works once and expires in "
+                  f"{RESET_TTL_MINUTES} minutes. If this was not you, ignore "
+                  f"this message -- nothing has changed.\n")
+    else:
+        # No mail server configured: the link goes to the server log and
+        # nowhere else. Deliberately not shown on the admin page the way a
+        # verification link is -- an admin who can read reset links is an admin
+        # who can take over any account on the site.
+        print(f"[password reset] {user['username']}: {link}", flush=True)
+    return link
+
+
+@app.get("/forgot", response_class=HTMLResponse)
+async def page_forgot(request: Request):
+    return render(request, "forgot.html", {"user": None, "sent": False,
+                                           "error": None})
+
+
+@app.post("/forgot", response_class=HTMLResponse)
+async def page_forgot_submit(request: Request, email: str = Form(...),
+                             csrf: str = Form("")):
+    check_csrf(request, csrf)
+
+    key = await _subject_hash("reset", client_ip(request))
+    recent = await q("SELECT count(*) AS n FROM login_throttle "
+                     "WHERE subject = %s AND at > now() - %s::interval",
+                     (key, LOGIN_WINDOW), one=True)
+    if recent["n"] >= RESETS_PER_IP:
+        return render(request, "forgot.html", {
+            "user": None, "sent": False,
+            "error": "Too many reset requests from here. Try again later."},
+            status_code=429)
+    await q("INSERT INTO login_throttle (subject) VALUES (%s)", (key,))
+
+    user = await q("SELECT id, email, username FROM users "
+                   "WHERE email_canonical = %s", (canonical_email(email),),
+                   one=True)
+    if user:
+        await issue_password_reset(user)
+        await audit(user, "password.reset.request", user["username"])
+
+    # The same page either way. "No account with that address" turns this form
+    # into a way to find out who has an account here.
+    return render(request, "forgot.html", {"user": None, "sent": True,
+                                           "error": None})
+
+
+async def valid_reset(token: str):
+    return await q(
+        """SELECT r.token_hash, u.id, u.username FROM password_resets r
+             JOIN users u ON u.id = r.user_id
+            WHERE r.token_hash = %s AND r.used_at IS NULL
+              AND r.expires_at > now()""", (_hash(token),), one=True)
+
+
+@app.get("/reset/{token}", response_class=HTMLResponse)
+async def page_reset(request: Request, token: str):
+    row = await valid_reset(token)
+    return render(request, "reset.html",
+                  {"user": None, "token": token, "ok": bool(row), "error": None},
+                  status_code=200 if row else 410)
+
+
+@app.post("/reset/{token}", response_class=HTMLResponse)
+async def page_reset_submit(request: Request, token: str,
+                            password: str = Form(...),
+                            password2: str = Form(""),
+                            csrf: str = Form("")):
+    check_csrf(request, csrf)
+    row = await valid_reset(token)
+    if not row:
+        return render(request, "reset.html",
+                      {"user": None, "token": token, "ok": False, "error": None},
+                      status_code=410)
+
+    if password != password2:
+        return render(request, "reset.html", {
+            "user": None, "token": token, "ok": True,
+            "error": "The two passwords do not match."}, status_code=422)
+    if len(password) < 10:
+        return render(request, "reset.html", {
+            "user": None, "token": token, "ok": True,
+            "error": "Password must be at least 10 characters."}, status_code=422)
+
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await conn.execute("UPDATE users SET password_hash = %s WHERE id = %s",
+                               (auth.hash_password(password), row["id"]))
+            await conn.execute("UPDATE password_resets SET used_at = now() "
+                               "WHERE token_hash = %s", (row["token_hash"],))
+            # Any other outstanding link for this account dies with it, and so
+            # does every live session: if the reason for the reset was that
+            # somebody else had the password, leaving their session logged in
+            # would make the reset pointless.
+            await conn.execute("UPDATE password_resets SET used_at = now() "
+                               "WHERE user_id = %s AND used_at IS NULL",
+                               (row["id"],))
+            await conn.execute("DELETE FROM sessions WHERE user_id = %s",
+                               (row["id"],))
+            # A password that worked is also evidence the account exists, so
+            # clear the failure counters that a guessing run may have piled up.
+            await conn.execute(
+                "DELETE FROM login_throttle WHERE subject = %s",
+                (await _subject_hash("user", row["username"]),))
+
+    await audit(row, "password.reset.complete", row["username"])
+    return RedirectResponse("/login?reset=1", status_code=303)
 
 
 # --- admin -------------------------------------------------------------------

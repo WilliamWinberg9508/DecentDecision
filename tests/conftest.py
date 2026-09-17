@@ -58,7 +58,8 @@ from app import main as dd                               # noqa: E402
 # users, so a CASCADE would take it anyway -- better to say so and put the
 # seeded prompt back deliberately than to have it vanish by side effect.
 TABLES = ("users", "agents", "issues", "votes", "sessions", "audit_log",
-          "site_config", "signup_throttle", "agent_prompts")
+          "site_config", "signup_throttle", "login_throttle", "password_resets",
+          "agent_prompts")
 
 _prompt = ""
 

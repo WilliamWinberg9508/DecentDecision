@@ -1,6 +1,6 @@
 # Decent Decision. Runs alongside the Lemmy stack on the same machine.
 #
-#   docker compose up -d
+#   docker compose up -d --build
 #
 # The API joins the Lemmy compose network so the cloudflared container that is
 # already running can reach it as http://decentdecision-api:8000. That means no
@@ -9,19 +9,66 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Not the stock image any more: archive_command runs inside this container,
+    # so this container needs pgbackrest. See backup/Dockerfile.postgres.
+    build:
+      context: .
+      dockerfile: backup/Dockerfile.postgres
+    image: decentdecision-postgres:16
     restart: always
     environment:
       - POSTGRES_USER=vote
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       - POSTGRES_DB=vote
+    # List form, so no shell parses this and %p reaches Postgres intact.
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=dd archive-push %p
+      - -c
+      - archive_timeout=300
     volumes:
       - votedata:/var/lib/postgresql/data
+      - backuprepo:/var/lib/pgbackrest
+      - backupspool:/var/spool/pgbackrest
+      - pgsocket:/var/run/postgresql
+      - ./backup/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vote -d vote"]
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Weekly full, daily incremental, and the restore drill lives here too:
+  #   docker compose exec backup /backup/restore-drill.sh
+  backup:
+    image: decentdecision-postgres:16
+    restart: always
+    user: postgres
+    entrypoint: ["/bin/sh", "/backup/backup-loop.sh"]
+    environment:
+      - POSTGRES_USER=vote
+      - POSTGRES_DB=vote
+      - PGBACKREST_STANZA=dd
+      - BACKUP_FULL_DOW=${BACKUP_FULL_DOW:-0}
+      - BACKUP_HOUR=${BACKUP_HOUR:-3}
+      # Only set when the off-machine repository in pgbackrest.conf is enabled.
+      - PGBACKREST_REPO2_S3_KEY=${R2_ACCESS_KEY_ID:-}
+      - PGBACKREST_REPO2_S3_KEY_SECRET=${R2_SECRET_ACCESS_KEY:-}
+    volumes:
+      # Read-only: this container takes backups, so it never has any business
+      # writing to the live data directory.
+      - votedata:/var/lib/postgresql/data:ro
+      - backuprepo:/var/lib/pgbackrest
+      - backupspool:/var/spool/pgbackrest
+      - pgsocket:/var/run/postgresql
+      - ./backup:/backup:ro
+      - ./backup/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   api:
     build: .
@@ -42,6 +89,9 @@ services:
       - AUTO_APPROVE_VERIFIED=${AUTO_APPROVE_VERIFIED:-true}
       - SIGNUPS_PER_HOUR=${SIGNUPS_PER_HOUR:-5}
       - BLOCKED_EMAIL_DOMAINS=${BLOCKED_EMAIL_DOMAINS:-}
+      - LOGIN_FAILS_PER_IP=${LOGIN_FAILS_PER_IP:-20}
+      - LOGIN_FAILS_PER_ACCOUNT=${LOGIN_FAILS_PER_ACCOUNT:-8}
+      - RESET_TTL_MINUTES=${RESET_TTL_MINUTES:-60}
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,6 +105,9 @@ services:
 
 volumes:
   votedata:
+  backuprepo:
+  backupspool:
+  pgsocket:
 
 networks:
   lemmy:

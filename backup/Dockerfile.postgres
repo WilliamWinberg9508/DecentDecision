@@ -1,0 +1,31 @@
+# Postgres with pgBackRest in the same image.
+#
+# Two containers are built from this: the database itself, which needs the
+# binary because archive_command runs inside it, and the backup sidecar, which
+# needs it to take the backups. Same image for both means they can never
+# disagree about the format on disk.
+#
+# This is the one place the stack stops being stock images. That is the price
+# of point-in-time recovery: WAL archiving has to happen in the database
+# process, so the database has to be able to run pgbackrest.
+
+FROM postgres:16-alpine
+
+RUN apk add --no-cache pgbackrest \
+ && mkdir -p /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest \
+ && chown -R postgres:postgres \
+      /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest
+
+# If the build fails because pgbackrest is not in this image's Alpine release,
+# use the Debian base instead -- it is larger but the package is always there:
+#
+#   FROM postgres:16
+#   RUN apt-get update && apt-get install -y --no-install-recommends pgbackrest \
+#    && rm -rf /var/lib/apt/lists/* \
+#    && mkdir -p /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest \
+#    && chown -R postgres:postgres \
+#         /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest
+#
+# Whichever base you use, `docker compose exec postgres pgbackrest version`
+# should report 2.46 or newer: block incremental and bundling are set in
+# pgbackrest.conf and older versions will refuse to start with them.

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Reset your password — Decent Decision{% endblock %}
+{% block content %}
+
+<h1>Reset your password</h1>
+
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+
+{% if sent %}
+  <p class="notice">If there is an account for that address, a reset link is on
+  its way. It works once and expires within the hour.</p>
+  <p class="lede">The same message appears whether or not an account exists —
+  otherwise this form would be a way to find out who has one here.</p>
+  <p><a href="/login">Back to logging in</a></p>
+{% else %}
+  <p class="lede">Enter the address you registered with. If it belongs to an
+  account, you will get a link that lets you set a new password.</p>
+
+  <form class="card" method="post" action="/forgot">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="email">Email address</label>
+    <input id="email" name="email" type="email" required autofocus
+           autocomplete="email">
+
+    <div class="hint">Resetting your password signs out every device that is
+    currently logged in, including this one.</div>
+
+    <button type="submit">Send the link</button>
+  </form>
+{% endif %}
+
+{% endblock %}
