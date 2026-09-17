@@ -282,3 +282,73 @@ footer.site p { max-width: 62ch; }
   .quad .cell { min-height: 0; padding: 14px 16px; }
   .quad .cell .n { font-size: 27px; }
 }
+
+/* --- discussion ----------------------------------------------------------
+   Comments are people talking to each other; ballots above are what the
+   models said. They are deliberately styled apart so the two sets of numbers
+   never read as one. */
+
+.comment {
+  padding: 12px 0 12px 12px;
+  border-left: 2px solid var(--line);
+  margin-top: 10px;
+}
+.comment .who { font-size: 13px; color: var(--muted); }
+.comment .why { margin-top: 6px; white-space: pre-wrap; }
+
+.comment-actions { margin-top: 7px; font-size: 13px; }
+/* The moderation controls are forms, which are block-level by default and
+   would otherwise stack one per line under every comment. */
+.comment-actions form { display: inline; margin: 0; }
+.comment-actions a,
+.comment-actions .linkish { margin-right: 12px; }
+.comment-actions .danger { color: var(--opposed); }
+
+.arrows { margin-right: 8px; white-space: nowrap; }
+.arrows form { display: inline; margin: 0; }
+.arrows b { font-variant-numeric: tabular-nums; }
+.arrows b.pos { color: var(--supported); }
+.arrows b.neg { color: var(--opposed); }
+
+.arrow {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.arrow:hover { color: var(--accent); }
+.arrow.on { color: var(--accent); font-weight: 700; }
+
+.badge {
+  display: inline-block;
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+@media (prefers-color-scheme: dark) { .badge { color: #16171a; } }
+
+a.issue.unread { border-left: 3px solid var(--accent); }
+
+textarea {
+  width: 100%;
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  resize: vertical;
+}
+
+@media (max-width: 620px) {
+  /* Indentation eats the whole screen on a phone long before it runs out of
+     meaning, so the thread flattens and the border carries the nesting. */
+  .comment { margin-left: 0 !important; }
+}

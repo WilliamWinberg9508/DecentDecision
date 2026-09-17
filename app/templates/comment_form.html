@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit your comment' if editing else 'Reply' }} — Decent Decision{% endblock %}
+{% block content %}
+
+<h1>{{ 'Edit your comment' if editing else 'Reply' }}</h1>
+<p class="issue-meta">on <a href="/i/{{ issue.id }}">{{ issue.title }}</a></p>
+
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+
+{% if parent %}
+  <div class="comment" style="margin-bottom:22px">
+    <div class="who">{{ parent.author }} wrote</div>
+    <div class="why">{{ parent.body }}</div>
+  </div>
+{% endif %}
+
+<form class="card" method="post"
+      action="{% if editing %}/c/{{ editing.id }}/edit{% else %}/i/{{ issue.id }}/comment{% endif %}">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  {% if parent %}<input type="hidden" name="parent_id" value="{{ parent.id }}">{% endif %}
+
+  <label for="body">{{ 'Your comment' if editing else 'Your reply' }}</label>
+  <textarea id="body" name="body" rows="6" maxlength="5000" required autofocus>{{ editing.body if editing else '' }}</textarea>
+  <div class="hint">Write @username to notify someone. They get it in their
+  inbox here — nothing is emailed.</div>
+
+  <button type="submit">{{ 'Save' if editing else 'Post reply' }}</button>
+</form>
+
+<p style="margin-top:18px"><a href="/i/{{ issue.id }}?comments={{ sort }}#discussion">Back
+to the discussion</a></p>
+
+{% endblock %}

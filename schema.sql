@@ -349,3 +349,121 @@ CREATE TABLE IF NOT EXISTS password_resets (
 );
 
 CREATE INDEX IF NOT EXISTS password_resets_user_idx ON password_resets (user_id);
+
+
+-- --- discussion --------------------------------------------------------------
+-- Comments are between people. They hang off the question, never off a ballot:
+-- the agents are not in the conversation, they are the thing being discussed.
+-- Keeping the two apart is also what stops a comment score ever being mistaken
+-- for part of the tally -- one is what people think, the other is what the
+-- models said, and the whole site depends on not blurring them.
+
+CREATE TABLE IF NOT EXISTS comments (
+    id         bigserial PRIMARY KEY,
+    issue_id   bigint      NOT NULL REFERENCES issues(id)   ON DELETE CASCADE,
+    -- Deleting a comment takes its replies with it. That is only ever used by
+    -- purge; ordinary removal is the soft kind below, which keeps the thread
+    -- readable rather than silently deleting other people's answers.
+    parent_id  bigint               REFERENCES comments(id) ON DELETE CASCADE,
+    author_id  bigint      NOT NULL REFERENCES users(id),
+    body       text        NOT NULL,
+    depth      int         NOT NULL DEFAULT 0,
+    -- Zero-padded ids joined by dots: '0000000012.0000000045'. Sorting a whole
+    -- thread into reading order is then one indexed ORDER BY instead of a
+    -- recursive query per comment.
+    path       text        NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    edited_at  timestamptz,
+    ups        int         NOT NULL DEFAULT 0,
+    downs      int         NOT NULL DEFAULT 0,
+    score      int         NOT NULL DEFAULT 0,
+    removed_at     timestamptz,
+    removed_by     bigint  REFERENCES users(id),
+    removed_reason text    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS comments_issue_idx  ON comments (issue_id, path);
+CREATE INDEX IF NOT EXISTS comments_author_idx ON comments (author_id, created_at DESC);
+
+-- One person, one vote per comment -- the same rule as ballots, enforced the
+-- same way, by the constraint rather than by a prior SELECT.
+CREATE TABLE IF NOT EXISTS comment_votes (
+    comment_id bigint      NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    user_id    bigint      NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+    value      smallint    NOT NULL CHECK (value IN (-1, 1)),
+    at         timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (comment_id, user_id)
+);
+
+-- Same shape as votes_tally: the counters live on the row, so rendering a
+-- thread never aggregates.
+CREATE OR REPLACE FUNCTION comment_votes_tally() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP IN ('DELETE', 'UPDATE') THEN
+        UPDATE comments SET
+            ups   = ups   - (OLD.value =  1)::int,
+            downs = downs - (OLD.value = -1)::int,
+            score = score - OLD.value
+         WHERE id = OLD.comment_id;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        UPDATE comments SET
+            ups   = ups   + (NEW.value =  1)::int,
+            downs = downs + (NEW.value = -1)::int,
+            score = score + NEW.value
+         WHERE id = NEW.comment_id;
+    END IF;
+    RETURN NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS comment_votes_tally_trg ON comment_votes;
+CREATE TRIGGER comment_votes_tally_trg
+    AFTER INSERT OR UPDATE OR DELETE ON comment_votes
+    FOR EACH ROW EXECUTE FUNCTION comment_votes_tally();
+
+-- How many comments a question has, on the question row, so the front page
+-- can show it without counting.
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS comment_count int NOT NULL DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION comments_count() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        UPDATE issues SET comment_count = comment_count - 1 WHERE id = OLD.issue_id;
+    ELSE
+        UPDATE issues SET comment_count = comment_count + 1 WHERE id = NEW.issue_id;
+    END IF;
+    RETURN NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS comments_count_trg ON comments;
+CREATE TRIGGER comments_count_trg
+    AFTER INSERT OR DELETE ON comments
+    FOR EACH ROW EXECUTE FUNCTION comments_count();
+
+
+-- --- notifications -----------------------------------------------------------
+-- Two kinds, both from a comment: somebody replied to you, or somebody wrote
+-- your name. In-site only -- no mail, so being mentioned can never be a way to
+-- fill up somebody's inbox.
+CREATE TABLE IF NOT EXISTS notifications (
+    id         bigserial PRIMARY KEY,
+    user_id    bigint      NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+    kind       text        NOT NULL CHECK (kind IN ('reply', 'mention')),
+    comment_id bigint      NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    issue_id   bigint      NOT NULL REFERENCES issues(id)   ON DELETE CASCADE,
+    actor_id   bigint               REFERENCES users(id),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    read_at    timestamptz,
+    -- A comment that both replies to you and names you is one notification,
+    -- not two.
+    UNIQUE (user_id, comment_id)
+);
+
+-- The unread count is read on every page render for a signed-in account, so
+-- it gets its own partial index rather than scanning a growing table.
+CREATE INDEX IF NOT EXISTS notifications_unread_idx
+    ON notifications (user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS notifications_user_idx
+    ON notifications (user_id, created_at DESC);

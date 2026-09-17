@@ -205,12 +205,19 @@ async def current_user(authorization: str = Header(...)) -> dict:
 
 async def session_user(request: Request) -> dict | None:
     """The logged-in account, or None. Expired rows simply fail the WHERE,
-    so a stale cookie logs you out rather than erroring."""
+    so a stale cookie logs you out rather than erroring.
+
+    The unread count rides along in the same query because the nav shows it on
+    every page: a second round trip per render, for one small indexed count,
+    is the kind of thing that is invisible until it is not."""
     token = request.cookies.get(auth.COOKIE)
     if not token:
         return None
     return await q(
-        """SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+        """SELECT u.*,
+                  (SELECT count(*) FROM notifications n
+                    WHERE n.user_id = u.id AND n.read_at IS NULL) AS unread
+             FROM sessions s JOIN users u ON u.id = s.user_id
             WHERE s.token_hash = %s AND s.expires_at > now()""",
         (auth.token_hash(token),), one=True)
 
@@ -841,6 +848,7 @@ async def browse(sort: str, window: str, status: str, page: int):
         f"""SELECT i.id, i.title, i.closes_at, i.created_at,
                    u.display_name AS author,
                    i.ballots, i.supported, i.contested, i.opposed, i.irrelevant,
+                   i.comment_count,
                    i.closes_at > now() AS is_open
               FROM issues i JOIN users u ON u.id = i.author_id
              WHERE {where}
@@ -899,9 +907,15 @@ async def page_issue(request: Request, issue_id: int):
     may_see = bool(viewer and (viewer["is_admin"]
                                or viewer["id"] == issue["author_id"]))
 
+    sort = request.query_params.get("comments", "best")
+    sort = sort if sort in COMMENT_SORTS else "best"
+
     return render(request, "issue.html", {
         "user": viewer,
         "issue": issue, "t": tally,
+        "comments": await thread(issue_id, viewer, sort),
+        "comment_sort": sort, "comment_sorts": COMMENT_SORTS,
+        "may_comment": bool(viewer and viewer["status"] == "approved"),
         "by_model": by_model, "votes": votes,
         "shown": len(votes), "capped": issue["ballots"] > len(votes),
         "is_open": issue["closes_at"] > datetime.now(timezone.utc),
@@ -1118,6 +1132,349 @@ async def page_logout(request: Request,
     response = RedirectResponse("/", status_code=303)
     auth.clear_cookie(response)
     return response
+
+
+# --- discussion --------------------------------------------------------------
+# Comments are between people, about what the agents said. They attach to the
+# question and never to a ballot: the models are the subject of the
+# conversation, not participants in it. Two numbers therefore live on this
+# page and they must never be confused -- the quadrant tally is what the models
+# answered, the comment score is what people thought of each other's remarks.
+
+MAX_COMMENT = 5000
+# Nesting is unlimited in the data; only the indent stops, so a long argument
+# keeps its shape instead of being silently reparented.
+MAX_INDENT = 6
+COMMENTS_PER_5_MIN = int(os.environ.get("COMMENTS_PER_5_MIN", "10"))
+MAX_COMMENTS_RENDERED = 1000
+
+MENTION_RE = re.compile(r"@([A-Za-z0-9_-]{3,32})")
+
+COMMENT_SORTS = {"best": "score", "new": "newest first", "old": "oldest first"}
+
+
+def _pad(n: int) -> str:
+    return f"{n:010d}"
+
+
+async def notify(user_id: int, kind: str, comment_id: int, issue_id: int,
+                 actor_id: int) -> None:
+    """One row per person per comment. A comment that both replies to you and
+    writes your name is one notification, not two -- the unique constraint
+    decides that, not a check here."""
+    if not user_id or user_id == actor_id:
+        return
+    await q("""INSERT INTO notifications
+                   (user_id, kind, comment_id, issue_id, actor_id)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT (user_id, comment_id) DO NOTHING""",
+            (user_id, kind, comment_id, issue_id, actor_id))
+
+
+async def mentioned_users(body: str) -> list[dict]:
+    names = {m.lower() for m in MENTION_RE.findall(body)}
+    if not names:
+        return []
+    return await q("SELECT id, username FROM users WHERE lower(username) = ANY(%s)",
+                   (list(names),))
+
+
+async def post_comment(issue_id: int, author: dict, body: str,
+                       parent: dict | None) -> int:
+    """Insert, then set the path from the id it was given. The path is what
+    makes reading order one indexed sort rather than a recursive query."""
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            row = await (await conn.execute(
+                """INSERT INTO comments (issue_id, parent_id, author_id, body, depth)
+                   VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                (issue_id, parent["id"] if parent else None, author["id"],
+                 clean(body)[:MAX_COMMENT],
+                 (parent["depth"] + 1) if parent else 0))).fetchone()
+            path = (f"{parent['path']}." if parent else "") + _pad(row["id"])
+            await conn.execute("UPDATE comments SET path = %s WHERE id = %s",
+                               (path, row["id"]))
+
+    if parent:
+        await notify(parent["author_id"], "reply", row["id"], issue_id,
+                     author["id"])
+    for person in await mentioned_users(body):
+        await notify(person["id"], "mention", row["id"], issue_id, author["id"])
+    return row["id"]
+
+
+async def comment_flood(user_id: int) -> bool:
+    row = await q("""SELECT count(*) AS n FROM comments
+                      WHERE author_id = %s AND created_at > now() - interval '5 minutes'""",
+                  (user_id,), one=True)
+    return row["n"] >= COMMENTS_PER_5_MIN
+
+
+async def thread(issue_id: int, viewer: dict | None, sort: str) -> list[dict]:
+    """The whole thread for one question, flattened into reading order.
+
+    Sorting happens here rather than in SQL because 'best' means ordering each
+    set of siblings, which a single ORDER BY over a materialised path cannot
+    express. At a thousand comments this is microseconds; if a thread ever
+    outgrows that, page the top-level comments and fetch their subtrees."""
+    rows = await q(
+        """SELECT c.id, c.parent_id, c.author_id, c.body, c.depth, c.created_at,
+                  c.edited_at, c.ups, c.downs, c.score,
+                  c.removed_at, c.removed_reason,
+                  u.display_name AS author, u.username,
+                  v.value AS my_vote
+             FROM comments c
+             JOIN users u ON u.id = c.author_id
+        LEFT JOIN comment_votes v ON v.comment_id = c.id AND v.user_id = %s
+            WHERE c.issue_id = %s
+         ORDER BY c.path
+            LIMIT %s""",
+        (viewer["id"] if viewer else 0, issue_id, MAX_COMMENTS_RENDERED))
+
+    children: dict[int | None, list] = {}
+    for row in rows:
+        row["removed"] = row["removed_at"] is not None
+        # An author sees their own removed comment, an admin sees anyone's.
+        row["may_see"] = bool(viewer and (viewer["is_admin"]
+                                          or viewer["id"] == row["author_id"]))
+        row["may_moderate"] = row["may_see"]
+        row["indent"] = min(row["depth"], MAX_INDENT)
+        children.setdefault(row["parent_id"], []).append(row)
+
+    if sort == "new":
+        key, reverse = (lambda r: r["created_at"]), True
+    elif sort == "old":
+        key, reverse = (lambda r: r["created_at"]), False
+    else:
+        # Ties by age, so an old comment is not leapfrogged by a new one on
+        # the same score.
+        key, reverse = (lambda r: (r["score"], -r["created_at"].timestamp())), True
+
+    ordered: list[dict] = []
+
+    def walk(parent_id):
+        for row in sorted(children.get(parent_id, []), key=key, reverse=reverse):
+            ordered.append(row)
+            walk(row["id"])
+
+    walk(None)
+    return ordered
+
+
+async def comment_target(request: Request, comment_id: int,
+                         need_admin: bool = False):
+    """(viewer, comment). 404 rather than 403 for someone with no business
+    here, so the existence of the control is not advertised."""
+    user = await session_user(request)
+    row = await q("SELECT * FROM comments WHERE id = %s", (comment_id,), one=True)
+    if not user or not row:
+        raise HTTPException(404, "not found")
+    if need_admin and not user["is_admin"]:
+        raise HTTPException(404, "not found")
+    if not user["is_admin"] and row["author_id"] != user["id"]:
+        raise HTTPException(404, "not found")
+    return user, row
+
+
+def back_to(issue_id: int, comment_id: int | None = None, sort: str = "best"):
+    anchor = f"#c{comment_id}" if comment_id else ""
+    return RedirectResponse(f"/i/{issue_id}?comments={sort}{anchor}",
+                            status_code=303)
+
+
+@app.post("/i/{issue_id}/comment")
+async def page_comment(request: Request, issue_id: int, body: str = Form(...),
+                       parent_id: int = Form(0), sort: str = Form("best"),
+                       csrf: str = Form("")):
+    check_csrf(request, csrf)
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse(f"/login?next=/i/{issue_id}", status_code=303)
+    if user["status"] != "approved":
+        raise HTTPException(403, "Your account is still awaiting approval.")
+    if not clean(body).strip():
+        return back_to(issue_id, None, sort)
+    if await comment_flood(user["id"]):
+        raise HTTPException(429, "You are posting comments very fast. "
+                                 "Give it a few minutes.")
+
+    issue = await q("SELECT id FROM issues WHERE id = %s AND removed_at IS NULL",
+                    (issue_id,), one=True)
+    if not issue:
+        raise HTTPException(404, "no such question")
+
+    parent = None
+    if parent_id:
+        parent = await q("SELECT * FROM comments WHERE id = %s AND issue_id = %s",
+                         (parent_id, issue_id), one=True)
+        if not parent:
+            raise HTTPException(404, "no such comment")
+        if parent["removed_at"]:
+            raise HTTPException(409, "that comment has been removed")
+
+    new_id = await post_comment(issue_id, user, body, parent)
+    return back_to(issue_id, new_id, sort)
+
+
+@app.get("/c/{comment_id}/reply", response_class=HTMLResponse)
+async def page_reply_form(request: Request, comment_id: int,
+                          sort: str = "best"):
+    """A page rather than a form under every comment: with no JavaScript, one
+    textarea per comment would be a hundred textareas on a busy question."""
+    user = await session_user(request)
+    row = await q("""SELECT c.*, u.display_name AS author FROM comments c
+                     JOIN users u ON u.id = c.author_id WHERE c.id = %s""",
+                  (comment_id,), one=True)
+    if not row or row["removed_at"]:
+        raise HTTPException(404, "not found")
+    if not user:
+        return RedirectResponse(f"/login?next=/c/{comment_id}/reply",
+                                status_code=303)
+    issue = await q("SELECT id, title FROM issues WHERE id = %s",
+                    (row["issue_id"],), one=True)
+    return render(request, "comment_form.html",
+                  {"user": user, "issue": issue, "parent": row,
+                   "editing": None, "sort": sort, "error": None})
+
+
+@app.get("/c/{comment_id}/edit", response_class=HTMLResponse)
+async def page_edit_form(request: Request, comment_id: int, sort: str = "best"):
+    user, row = await comment_target(request, comment_id)
+    if row["author_id"] != user["id"]:
+        # Admins may remove, never rewrite. Editing someone else's words under
+        # their name is not moderation.
+        raise HTTPException(404, "not found")
+    issue = await q("SELECT id, title FROM issues WHERE id = %s",
+                    (row["issue_id"],), one=True)
+    return render(request, "comment_form.html",
+                  {"user": user, "issue": issue, "parent": None,
+                   "editing": row, "sort": sort, "error": None})
+
+
+@app.post("/c/{comment_id}/edit")
+async def page_edit(request: Request, comment_id: int, body: str = Form(...),
+                    sort: str = Form("best"), csrf: str = Form("")):
+    check_csrf(request, csrf)
+    user, row = await comment_target(request, comment_id)
+    if row["author_id"] != user["id"] or not clean(body).strip():
+        raise HTTPException(404, "not found")
+    await q("""UPDATE comments SET body = %s, edited_at = now() WHERE id = %s""",
+            (clean(body)[:MAX_COMMENT], comment_id))
+    # Names added by the edit still notify; the ones already there do not,
+    # because the unique constraint already has a row for them.
+    for person in await mentioned_users(body):
+        await notify(person["id"], "mention", comment_id, row["issue_id"],
+                     user["id"])
+    return back_to(row["issue_id"], comment_id, sort)
+
+
+@app.post("/c/{comment_id}/vote")
+async def page_comment_vote(request: Request, comment_id: int,
+                            value: int = Form(...), sort: str = Form("best"),
+                            csrf: str = Form("")):
+    """Clicking the same arrow again takes the vote back, which is what people
+    expect and what stops a misclick being permanent."""
+    check_csrf(request, csrf)
+    user = await session_user(request)
+    row = await q("SELECT issue_id, removed_at FROM comments WHERE id = %s",
+                  (comment_id,), one=True)
+    if not row:
+        raise HTTPException(404, "not found")
+    if not user:
+        return RedirectResponse(f"/login?next=/i/{row['issue_id']}",
+                                status_code=303)
+    if user["status"] != "approved" or row["removed_at"]:
+        raise HTTPException(403, "not allowed")
+    if value not in (1, -1):
+        raise HTTPException(422, "a vote is +1 or -1")
+
+    changed = await q(
+        """INSERT INTO comment_votes (comment_id, user_id, value)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (comment_id, user_id) DO UPDATE
+               SET value = EXCLUDED.value, at = now()
+             WHERE comment_votes.value <> EXCLUDED.value
+           RETURNING value""", (comment_id, user["id"], value), one=True)
+    if not changed:
+        # Nothing to update means the same arrow was already lit: take it back.
+        await q("DELETE FROM comment_votes WHERE comment_id = %s AND user_id = %s",
+                (comment_id, user["id"]))
+    return back_to(row["issue_id"], comment_id, sort)
+
+
+@app.post("/c/{comment_id}/remove")
+async def page_comment_remove(request: Request, comment_id: int,
+                              reason: str = Form(""), sort: str = Form("best"),
+                              csrf: str = Form("")):
+    """Soft, like a question: the row stays and the replies underneath it stay
+    readable. Deleting it outright would take other people's answers with it."""
+    check_csrf(request, csrf)
+    user, row = await comment_target(request, comment_id)
+    await q("""UPDATE comments SET removed_at = now(), removed_by = %s,
+                                   removed_reason = %s
+                WHERE id = %s AND removed_at IS NULL""",
+            (user["id"], clean(reason)[:500], comment_id))
+    await audit(user, "comment.remove", f"comment {comment_id}",
+                clean(reason)[:500] or "no reason given")
+    return back_to(row["issue_id"], comment_id, sort)
+
+
+@app.post("/c/{comment_id}/restore")
+async def page_comment_restore(request: Request, comment_id: int,
+                               sort: str = Form("best"), csrf: str = Form("")):
+    check_csrf(request, csrf)
+    user, row = await comment_target(request, comment_id, need_admin=True)
+    await q("""UPDATE comments SET removed_at = NULL, removed_by = NULL,
+                                   removed_reason = '' WHERE id = %s""",
+            (comment_id,))
+    await audit(user, "comment.restore", f"comment {comment_id}")
+    return back_to(row["issue_id"], comment_id, sort)
+
+
+@app.post("/c/{comment_id}/purge")
+async def page_comment_purge(request: Request, comment_id: int,
+                             sort: str = Form("best"), csrf: str = Form("")):
+    """Really deletes, and takes every reply under it. For content that must
+    not stay on disk, and for erasure requests -- not for tidying up, which is
+    what remove is for. The audit row goes in first, because afterwards there
+    is nothing to point at."""
+    check_csrf(request, csrf)
+    user, row = await comment_target(request, comment_id, need_admin=True)
+    await audit(user, "comment.purge", f"comment {comment_id}",
+                row["body"][:200])
+    await q("DELETE FROM comments WHERE id = %s", (comment_id,))
+    return back_to(row["issue_id"], None, sort)
+
+
+# --- the inbox ---------------------------------------------------------------
+
+@app.get("/inbox", response_class=HTMLResponse)
+async def page_inbox(request: Request):
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse("/login?next=/inbox", status_code=303)
+    items = await q(
+        """SELECT n.id, n.kind, n.created_at, n.read_at, n.comment_id,
+                  n.issue_id, i.title, a.display_name AS actor,
+                  left(c.body, 300) AS excerpt, c.removed_at
+             FROM notifications n
+             JOIN comments c ON c.id = n.comment_id
+             JOIN issues   i ON i.id = n.issue_id
+        LEFT JOIN users    a ON a.id = n.actor_id
+            WHERE n.user_id = %s
+         ORDER BY n.created_at DESC LIMIT 100""", (user["id"],))
+    return render(request, "inbox.html", {"user": user, "items": items})
+
+
+@app.post("/inbox/read")
+async def page_inbox_read(request: Request, csrf: str = Form("")):
+    check_csrf(request, csrf)
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    await q("UPDATE notifications SET read_at = now() "
+            "WHERE user_id = %s AND read_at IS NULL", (user["id"],))
+    return RedirectResponse("/inbox", status_code=303)
 
 
 # --- forgotten passwords -----------------------------------------------------

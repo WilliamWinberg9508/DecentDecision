@@ -1,0 +1,105 @@
+{# The discussion under a question. Flattened in the view and indented here,
+   so no recursive macro and no recursion limit on a deep argument.
+
+   Every action is a form post: the site ships no JavaScript, so voting reloads
+   the page and lands back on the comment you voted on. #}
+
+<h2 style="margin-top:50px" id="discussion">Discussion</h2>
+<p class="lede">People talking to each other about what the models said. These
+scores are human votes on comments — they are not part of the tally above, and
+nothing here changes what any agent answered.</p>
+
+{% if may_comment %}
+  <form class="card" method="post" action="/i/{{ issue.id }}/comment">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="sort" value="{{ comment_sort }}">
+    <label for="body">Add a comment</label>
+    <textarea id="body" name="body" rows="4" maxlength="5000"
+              placeholder="Write @username to notify someone."></textarea>
+    <button type="submit">Comment</button>
+  </form>
+{% elif user %}
+  <p class="notice">Your account is still awaiting approval, so you can read
+  the discussion but not add to it yet.</p>
+{% else %}
+  <p class="notice"><a href="/login?next=/i/{{ issue.id }}">Log in</a> to join
+  the discussion.</p>
+{% endif %}
+
+{% if comments %}
+  <nav class="tabs sub" style="margin-top:22px">
+    {% for key, label in comment_sorts.items() %}
+      <a href="/i/{{ issue.id }}?comments={{ key }}#discussion"
+         class="{{ 'on' if comment_sort == key }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+{% endif %}
+
+{% for c in comments %}
+  <div class="comment" id="c{{ c.id }}"
+       style="margin-left: {{ c.indent * 22 }}px">
+
+    {% if c.removed and not c.may_see %}
+      <div class="who">[removed{% if c.removed_reason %} — {{ c.removed_reason }}{% endif %}]</div>
+      <div class="why">A comment was here and has been taken down. The replies
+      to it are kept, which is why this line is still here.</div>
+    {% else %}
+      <div class="who">
+        <span class="arrows">
+          {% if user %}
+            <form method="post" action="/c/{{ c.id }}/vote" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="sort" value="{{ comment_sort }}">
+              <input type="hidden" name="value" value="1">
+              <button type="submit" class="arrow {{ 'on' if c.my_vote == 1 }}"
+                      title="Agree">&#9650;</button>
+            </form>
+          {% endif %}
+          <b class="{{ 'pos' if c.score > 0 }}{{ 'neg' if c.score < 0 }}">{{ c.score }}</b>
+          {% if user %}
+            <form method="post" action="/c/{{ c.id }}/vote" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="sort" value="{{ comment_sort }}">
+              <input type="hidden" name="value" value="-1">
+              <button type="submit" class="arrow {{ 'on' if c.my_vote == -1 }}"
+                      title="Disagree">&#9660;</button>
+            </form>
+          {% endif %}
+        </span>
+        {{ c.author }} · {{ c.created_at.strftime('%-d %B %H:%M') }}
+        {% if c.edited_at %}· edited{% endif %}
+        {% if c.removed %}· <strong>removed, visible to you only</strong>{% endif %}
+      </div>
+
+      <div class="why">{{ c.body }}</div>
+
+      <div class="comment-actions">
+        {% if user and not c.removed %}
+          <a href="/c/{{ c.id }}/reply?sort={{ comment_sort }}">reply</a>
+        {% endif %}
+        {% if user and user.id == c.author_id and not c.removed %}
+          <a href="/c/{{ c.id }}/edit?sort={{ comment_sort }}">edit</a>
+        {% endif %}
+        {% if c.may_moderate and not c.removed %}
+          <form method="post" action="/c/{{ c.id }}/remove" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="sort" value="{{ comment_sort }}">
+            <button type="submit" class="linkish">remove</button>
+          </form>
+        {% endif %}
+        {% if c.removed and is_admin %}
+          <form method="post" action="/c/{{ c.id }}/restore" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="sort" value="{{ comment_sort }}">
+            <button type="submit" class="linkish">restore</button>
+          </form>
+          <form method="post" action="/c/{{ c.id }}/purge" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="sort" value="{{ comment_sort }}">
+            <button type="submit" class="linkish danger">purge with replies</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+{% endfor %}

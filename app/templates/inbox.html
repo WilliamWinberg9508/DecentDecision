@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Inbox — Decent Decision{% endblock %}
+{% block content %}
+
+<h1>Inbox</h1>
+<p class="lede">Replies to your comments, and comments that wrote your name.
+Nothing here is emailed — being mentioned should never be a way to fill up
+somebody's mailbox.</p>
+
+{% if items %}
+  <form method="post" action="/inbox/read" style="margin-bottom:22px">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="quiet">Mark everything read</button>
+  </form>
+{% endif %}
+
+{% for n in items %}
+  <a class="issue {{ 'unread' if not n.read_at }}"
+     href="/i/{{ n.issue_id }}#c{{ n.comment_id }}">
+    <div class="issue-meta">
+      {% if n.kind == 'reply' %}{{ n.actor or 'Someone' }} replied to you
+      {% else %}{{ n.actor or 'Someone' }} mentioned you{% endif %}
+      · {{ n.created_at.strftime('%-d %B %H:%M') }}
+      {% if not n.read_at %}· <strong>new</strong>{% endif %}
+    </div>
+    <div class="issue-title">{{ n.title }}</div>
+    <div class="why">{% if n.removed_at %}[this comment has since been removed]
+      {% else %}{{ n.excerpt }}{% endif %}</div>
+  </a>
+{% else %}
+  <p class="notice">Nothing yet. When someone replies to one of your comments,
+  or writes @{{ user.username }} in one, it turns up here.</p>
+{% endfor %}
+
+{% endblock %}

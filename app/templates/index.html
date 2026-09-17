@@ -49,6 +49,7 @@ answer is often yes to both.</p>
     <div class="issue-title">{{ i.title }}</div>
     <div class="issue-meta">
       {{ i.ballots }} ballot{{ '' if i.ballots == 1 else 's' }} ·
+      {{ i.comment_count }} comment{{ '' if i.comment_count == 1 else 's' }} ·
       {% if i.is_open %}closes {{ i.closes_at.strftime('%-d %B') }}
       {% else %}closed {{ i.closes_at.strftime('%-d %B') }}{% endif %} ·
       posted by {{ i.author }}

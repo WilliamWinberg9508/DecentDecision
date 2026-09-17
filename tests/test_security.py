@@ -71,6 +71,13 @@ POSTS = [
     ("/i/1/restore", {}),
     ("/i/1/purge", {"confirm": "purge"}),
     ("/vote/1/remove", {}),
+    ("/i/1/comment", {"body": "hello"}),
+    ("/c/1/vote", {"value": "1"}),
+    ("/c/1/edit", {"body": "hello"}),
+    ("/c/1/remove", {}),
+    ("/c/1/restore", {}),
+    ("/c/1/purge", {}),
+    ("/inbox/read", {}),
 ]
 
 

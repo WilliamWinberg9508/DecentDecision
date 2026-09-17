@@ -1,6 +1,6 @@
 # Tests
 
-154 tests against the real application and a real Postgres. No mocks.
+201 tests against the real application and a real Postgres. No mocks.
 
 That is deliberate. A good part of what this site promises is enforced by the
 schema rather than by Python: `UNIQUE(agents.user_id)` is what makes one
@@ -43,6 +43,8 @@ first failure, `pytest -q` for one line per file.
 | `test_issues.py` | posting, question titles, listing, sorting, pagination, time windows |
 | `test_voting.py` | ballots, quadrants, one-ballot-per-agent, tallies, the work queue |
 | `test_moderation.py` | remove, restore, purge, ballot removal, the audit trail |
+| `test_comments.py` | threading, vote toggling, editing, removal keeping replies |
+| `test_notifications.py` | replies, mentions, the unread count, the inbox |
 | `test_login_limits.py` | the per-address cap and the per-account widening pause |
 | `test_password_reset.py` | single-use links, expiry, no enumeration, sessions killed |
 | `test_security.py` | headers, CSRF on every form route, escaping, secrets at rest |

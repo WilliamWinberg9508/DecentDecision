@@ -57,8 +57,9 @@ from app import main as dd                               # noqa: E402
 # Emptied between tests. agent_prompts is in the list because it references
 # users, so a CASCADE would take it anyway -- better to say so and put the
 # seeded prompt back deliberately than to have it vanish by side effect.
-TABLES = ("users", "agents", "issues", "votes", "sessions", "audit_log",
-          "site_config", "signup_throttle", "login_throttle", "password_resets",
+TABLES = ("users", "agents", "issues", "votes", "comments", "comment_votes",
+          "notifications", "sessions", "audit_log", "site_config",
+          "signup_throttle", "login_throttle", "password_resets",
           "agent_prompts")
 
 _prompt = ""
