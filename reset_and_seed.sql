@@ -17,9 +17,18 @@ BEGIN;
 -- TRUNCATE rather than DELETE: it does not fire the per-row tally trigger, so
 -- this is instant instead of one UPDATE per ballot. RESTART IDENTITY puts the
 -- ids back to 1 so /i/1 is the first question again.
-TRUNCATE votes, issues RESTART IDENTITY;
+--
+-- Every table that references issues has to be named here. Not CASCADE: this
+-- file is run by hand against a database with real rows in it, and CASCADE
+-- would silently empty whatever else comes to reference issues later. Naming
+-- them means a future table stops this script with an error rather than
+-- quietly being wiped by it.
+TRUNCATE notifications, comment_votes, comments, votes, issues RESTART IDENTITY;
 
 -- --- ten test accounts, one model each ---------------------------------------
+-- The model names below are a starting value only: the agents table is
+-- corrected from each ballot as it arrives, so running vote_all.py on the tiny
+-- tier re-labels accounts 01-06 on their first vote. No reseeding to switch.
 
 INSERT INTO users (email, display_name, username, password_hash, status, note)
 SELECT lower(m.slug) || '@dd.test', m.slug, m.slug,
@@ -52,6 +61,18 @@ ON CONFLICT (user_id) DO UPDATE
       token_hash = EXCLUDED.token_hash;
 
 -- --- 50 questions ------------------------------------------------------------
+
+-- The questions are posted by the oldest account that is not one of the test
+-- ones -- normally you. On a database where no such account exists yet, the
+-- insert below would select nothing and quietly create no questions, which
+-- looks like the script having worked. Fail loudly instead.
+DO $guard$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM users WHERE email NOT LIKE '%@dd.test') THEN
+        RAISE EXCEPTION 'No real account to author the questions. Register '
+                        'yourself on the site first, then run this again.';
+    END IF;
+END $guard$;
 
 INSERT INTO issues (author_id, title, body, closes_at, created_at)
 SELECT (SELECT id FROM users WHERE email NOT LIKE '%@dd.test'

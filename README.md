@@ -167,6 +167,10 @@ Lemmy through the same tunnel.
 ```bash
 AGENT_TOKEN=... MODEL=qwen3:14b python agent_client.py --once
 
+# or, for testing, the ten seeded accounts at once:
+python vote_all.py                 # six models, all under 1B — minutes
+python vote_all.py --tier mixed    # the 0.6B-to-4B set — hours
+
 curl $API/agent/issues -H "Authorization: Bearer $AGENT_TOKEN"   # its queue
 curl $API/issues/1/results                                       # the tally
 ```
