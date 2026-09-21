@@ -20,31 +20,73 @@
 </head>
 <body class="{% block body_class %}{% endblock %}">
 
+{# The menu toggle. No JavaScript on this site, so it is a checkbox and two
+   labels: on a wide screen ticking it hides the sidebar, on a narrow one it
+   opens the sidebar over the page. It is not remembered between pages. #}
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Show or hide the menu">
+
 <header class="site">
-  <div class="wrap">
-    <a class="brand" href="/"><img src="/static/logo-mark.png" alt=""
-      width="54" height="48">Decent&nbsp;Decision</a>
-    <nav>
-      <a href="/">All</a>
-      <a href="/forums">Forums</a>
-      <a href="/new">Ask a question</a>
-      {% if user %}
-        {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
-        <a href="/inbox">Inbox{% if user.unread %}
-          <span class="badge">{{ user.unread }}</span>{% endif %}</a>
-        <a href="/account">{{ user.username or user.display_name }}</a>
-        <form method="post" action="/logout" class="inline">
-  <input type="hidden" name="csrf" value="{{ csrf_token }}">
-          <button type="submit" class="linkish">Log out</button>
-        </form>
-      {% else %}
-        <a href="/login">Log in</a>
-        <a href="/register">Register</a>
-      {% endif %}
-    </nav>
-  </div>
+  <label for="nav-toggle" class="burger" title="Menu">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </label>
+  <a class="brand" href="/"><img src="/static/logo-mark.png" alt=""
+    width="54" height="48">Decent&nbsp;Decision</a>
+  <nav>
+    <a href="/new" class="cta">+ Ask a question</a>
+    {% if user %}
+      {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
+      <a href="/inbox">Inbox{% if user.unread %}
+        <span class="badge">{{ user.unread }}</span>{% endif %}</a>
+      <a href="/account">{{ user.username or user.display_name }}</a>
+      <form method="post" action="/logout" class="inline">
+<input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button type="submit" class="linkish">Log out</button>
+      </form>
+    {% else %}
+      <a href="/register" class="pill">Register</a>
+      <a href="/login" class="pill solid">Log in</a>
+    {% endif %}
+  </nav>
 </header>
 
+{% set here = request.url.path %}
+<div class="shell">
+
+<aside class="side" aria-label="Site">
+  <nav class="side-group">
+    <a href="/" class="{{ 'on' if here == '/' }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>All</a>
+    <a href="/forums" class="{{ 'on' if here == '/forums' }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>Forums</a>
+    <a href="/new" class="{{ 'on' if here == '/new' }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ask a question</a>
+    {% if user %}
+      <a href="/inbox" class="{{ 'on' if here == '/inbox' }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l3-8h10l3 8v6H4zM4 13h5l1 2h4l1-2h5"/></svg>Inbox</a>
+    {% endif %}
+  </nav>
+
+  {# <details> is how a section folds away without JavaScript. #}
+  <details class="side-section" open>
+    <summary>Forums</summary>
+    <nav>
+      {% for f in nav_forums %}
+        {% set b = badge(f.slug, f.name) %}
+        <a href="/f/{{ f.slug }}" class="{{ 'on' if here == '/f/' ~ f.slug or (issue is defined and issue and issue.forum_slug == f.slug) }}">
+          <span class="avatar" style="--h: {{ b.hue }}">{{ b.code }}</span>{{ f.name }}</a>
+      {% endfor %}
+    </nav>
+    <p class="side-more"><a href="/forums">See all forums</a></p>
+  </details>
+
+</aside>
+
+<label for="nav-toggle" class="side-scrim" aria-hidden="true"></label>
+<label for="nav-toggle" class="side-collapse" title="Hide or show the menu">
+  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+</label>
+
+<div class="page">
 <main class="wrap">
 {% block content %}{% endblock %}
 </main>
@@ -64,6 +106,8 @@
     {% endif %}
   </div>
 </footer>
+</div>
 
+</div>
 </body>
 </html>

@@ -12,6 +12,8 @@ import hashlib
 import os
 import re
 import secrets
+import time
+import zlib
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -83,6 +85,41 @@ templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 # row so it costs no query and cannot go stale between workers.
 templates.env.globals["abuse_contact"] = os.environ.get("ABUSE_CONTACT", "")
 
+# The left sidebar lists every forum on every page. Rather than a query per
+# page, each worker keeps the list and refreshes it at most every 30 seconds
+# (and at once, in the worker that created a forum). A new forum can take up
+# to half a minute to appear in the other workers' sidebars; nothing else
+# depends on this copy.
+NAV = {"forums": [], "at": 0.0}
+NAV_TTL = 30.0
+
+
+async def refresh_nav(force: bool = False) -> None:
+    if force or time.monotonic() - NAV["at"] > NAV_TTL:
+        NAV["forums"] = await q("SELECT slug, name, kind FROM forums "
+                                "ORDER BY position, name")
+        NAV["at"] = time.monotonic()
+
+
+# A round badge beside each forum, like a community icon: the country code
+# where there is one, otherwise the initials, on a colour fixed by the slug so
+# it is the same on every page and every restart.
+ISO = {"china": "CN", "india": "IN", "united-states": "US", "indonesia": "ID",
+       "brazil": "BR", "russia": "RU", "pakistan": "PK", "mexico": "MX",
+       "japan": "JP", "nigeria": "NG", "philippines": "PH", "egypt": "EG",
+       "vietnam": "VN", "germany": "DE", "bangladesh": "BD", "turkey": "TR",
+       "iran": "IR", "united-kingdom": "GB", "thailand": "TH", "france": "FR",
+       "italy": "IT", "south-africa": "ZA", "south-korea": "KR", "spain": "ES",
+       "colombia": "CO"}
+
+
+def badge(slug: str, name: str) -> dict:
+    code = ISO.get(slug) or "".join(w[0] for w in name.split()[:2]).upper() or "?"
+    return {"code": code, "hue": zlib.crc32(slug.encode()) % 360}
+
+
+templates.env.globals["badge"] = badge
+
 # default-src 'none' plus explicit grants. The important line is that there is
 # no script source at all: this site ships zero JavaScript, so any injected
 # <script> is dead on arrival.
@@ -100,6 +137,11 @@ CSP = ("default-src 'none'; "
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    if not request.url.path.startswith(("/static", "/healthz", "/agent", "/issues")):
+        try:
+            await refresh_nav()
+        except Exception:
+            pass          # a stale or empty sidebar beats a failed page
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = CSP
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -122,6 +164,7 @@ def render(request: Request, name: str, ctx: dict, status_code: int = 200):
     new form quietly shipping without protection."""
     token = request.cookies.get(auth.CSRF_COOKIE) or auth.new_csrf()
     ctx["csrf_token"] = token
+    ctx.setdefault("nav_forums", NAV["forums"])
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     auth.set_csrf_cookie(response, token)
     return response
@@ -290,7 +333,9 @@ async def forums_with_counts() -> list[dict]:
     return await q(
         """SELECT f.slug, f.name, f.description, f.kind,
                   count(i.id) FILTER (WHERE i.closes_at > now()) AS open_questions,
-                  count(i.id) AS questions
+                  count(i.id) AS questions,
+                  coalesce(sum(i.ballots) FILTER (WHERE i.closes_at > now()), 0)
+                      AS open_ballots
              FROM forums f
         LEFT JOIN issues i ON i.forum_id = f.id AND i.removed_at IS NULL
          GROUP BY f.id ORDER BY f.position, f.name""")
@@ -1844,6 +1889,7 @@ async def page_admin_forum(request: Request, name: str = Form(...),
     if not row:
         return RedirectResponse("/admin?done=forum-taken#forums", status_code=303)
     await audit(admin, "forum.create", slug, name)
+    await refresh_nav(force=True)
     return RedirectResponse(f"/f/{slug}", status_code=303)
 
 

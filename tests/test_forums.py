@@ -162,3 +162,18 @@ async def test_only_admins_create_forums(client, browser, sql):
         "slug": "hiking", "name": "Hiking", "csrf": await csrf(anna, "/new")})
     assert r.status_code == 404
     assert not await sql("SELECT 1 FROM forums WHERE slug = 'hiking'")
+
+
+async def test_the_sidebar_lists_every_forum_on_every_page(client):
+    for path in ("/", "/login", "/forums", "/f/japan"):
+        page = (await client.get(path)).text
+        assert 'class="side"' in page, path
+        assert page.count('<span class="avatar"') >= 25, path
+    japan = (await client.get("/f/japan")).text
+    assert '<a href="/f/japan" class="on">' in japan
+
+    # A forum an admin creates shows up at once in that worker's sidebar.
+    await approved(client, "Tengil")
+    await client.post("/admin/forums", data={
+        "slug": "gardening", "name": "Gardening", "csrf": await csrf(client, "/admin")})
+    assert 'href="/f/gardening"' in (await client.get("/login")).text
