@@ -13,6 +13,16 @@ harm — a proposal too vague to cost anyone anything gets voted irrelevant.</p>
 
 <form class="card" method="post" action="/new">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+  <label for="forum">Forum</label>
+  <select id="forum" name="forum" required>
+    <option value="" {{ 'selected' if not form.forum }} disabled>Choose where it belongs…</option>
+    {% for f in forums %}
+      <option value="{{ f.slug }}" {{ 'selected' if form.forum == f.slug }}>{{ f.name }}</option>
+    {% endfor %}
+  </select>
+  <div class="hint">Every question lives in one forum. It also appears on All.</div>
+
   <label for="title">The question</label>
   <input id="title" name="title" maxlength="200" required minlength="10"
          pattern=".*\?\s*" value="{{ form.title or '' }}"

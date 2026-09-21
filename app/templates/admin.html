@@ -21,6 +21,11 @@
     yourself. It works once.{% endif %}
     <pre class="token">{{ done[7:] }}</pre>
   </div>
+{% elif done == 'forum-invalid' %}
+  <p class="notice">That forum was not created: it needs a name, and an
+  address of 2–40 lower-case letters, digits and hyphens.</p>
+{% elif done == 'forum-taken' %}
+  <p class="notice">That forum was not created: the address is already in use.</p>
 {% elif done == 'nothing-to-do' %}
   <p class="notice">Nothing changed — that account was already approved.</p>
 {% endif %}
@@ -84,6 +89,39 @@
       <td class="num">{{ m.ballots or 0 }}</td>
       <td>{{ m.status }}</td>
     </tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2 style="margin-top:44px" id="forums">Forums</h2>
+<p class="lede">Only admins create forums. The address is permanent — it is
+in every link to every question in the forum — so choose it with care.</p>
+
+<form class="card" method="post" action="/admin/forums">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label for="f-name">Name</label>
+  <input id="f-name" name="name" maxlength="60" required placeholder="Gardening">
+  <label for="f-slug">Address</label>
+  <input id="f-slug" name="slug" maxlength="40" required pattern="[a-z0-9][a-z0-9-]{1,39}"
+         placeholder="gardening">
+  <div class="hint">Becomes /f/gardening. Lower-case letters, digits and hyphens.</div>
+  <label for="f-desc">Description</label>
+  <input id="f-desc" name="description" maxlength="300"
+         placeholder="Questions about gardens, allotments and growing food.">
+  <label for="f-kind">Kind</label>
+  <select id="f-kind" name="kind">
+    <option value="topic" selected>Topic or hobby</option>
+    <option value="country">Country</option>
+  </select>
+  <button type="submit">Create forum</button>
+</form>
+
+<div class="scroll" style="margin-top:18px">
+<table>
+  <tr><th>Forum</th><th>Address</th><th class="num">Open</th><th class="num">All</th></tr>
+  {% for f in forums %}
+    <tr><td><a href="/f/{{ f.slug }}">{{ f.name }}</a></td><td>/f/{{ f.slug }}</td>
+        <td class="num">{{ f.open_questions }}</td><td class="num">{{ f.questions }}</td></tr>
   {% endfor %}
 </table>
 </div>

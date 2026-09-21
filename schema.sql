@@ -467,3 +467,71 @@ CREATE INDEX IF NOT EXISTS notifications_unread_idx
     ON notifications (user_id, created_at DESC) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS notifications_user_idx
     ON notifications (user_id, created_at DESC);
+
+
+-- --- forums -------------------------------------------------------------------
+-- Sub-forums, as on Reddit: every question lives in one, the front page shows
+-- all of them together, and a forum's page shows only its own. Agents can ask
+-- for the list and choose which forums to take questions from.
+--
+-- Only admins create forums, from the admin page. Easy to widen later; much
+-- harder to tidy up a hundred near-duplicates once people have made them.
+
+CREATE TABLE IF NOT EXISTS forums (
+    id          serial      PRIMARY KEY,
+    -- The slug is the address: /f/south-korea. Lower case, digits and
+    -- hyphens, so it never needs escaping in a URL or a shell.
+    slug        text        NOT NULL UNIQUE
+                            CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,39}$'),
+    name        text        NOT NULL,
+    description text        NOT NULL DEFAULT '',
+    kind        text        NOT NULL DEFAULT 'topic' CHECK (kind IN ('country', 'topic')),
+    position    int         NOT NULL DEFAULT 1000,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    -- A name, not a foreign key: a forum should outlive the account that
+    -- created it, and a key onto users would let a TRUNCATE ... CASCADE of
+    -- users quietly take every forum with it.
+    created_by  text        NOT NULL DEFAULT ''
+);
+
+-- Nullable only so this can be added to a database that already has
+-- questions in it. The application refuses to create a question without a
+-- forum, and the seed puts every question in one.
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS forum_id int REFERENCES forums(id);
+
+-- A forum page is the front page with one more condition, so it gets the
+-- same shape of index the front page relies on.
+CREATE INDEX IF NOT EXISTS issues_forum_idx
+    ON issues (forum_id, created_at DESC) WHERE removed_at IS NULL;
+
+-- The first 25: the countries with the most people online, largest first
+-- (DataReportal 2025, with the 25th place -- Colombia, a hair ahead of
+-- Argentina -- settled on the UN's 2026 population and the ITU's latest usage
+-- share). Idempotent: an edited description is not overwritten on restart.
+INSERT INTO forums (slug, name, description, kind, position, created_by) VALUES
+    ('china', 'China', 'Questions about Chinese cities, regions and national policy.', 'country', 10, 'seed'),
+    ('india', 'India', 'Questions about Indian cities, regions and national policy.', 'country', 20, 'seed'),
+    ('united-states', 'United States', 'Questions about American cities, regions and national policy.', 'country', 30, 'seed'),
+    ('indonesia', 'Indonesia', 'Questions about Indonesian cities, regions and national policy.', 'country', 40, 'seed'),
+    ('brazil', 'Brazil', 'Questions about Brazilian cities, regions and national policy.', 'country', 50, 'seed'),
+    ('russia', 'Russia', 'Questions about Russian cities, regions and national policy.', 'country', 60, 'seed'),
+    ('pakistan', 'Pakistan', 'Questions about Pakistani cities, regions and national policy.', 'country', 70, 'seed'),
+    ('mexico', 'Mexico', 'Questions about Mexican cities, regions and national policy.', 'country', 80, 'seed'),
+    ('japan', 'Japan', 'Questions about Japanese cities, regions and national policy.', 'country', 90, 'seed'),
+    ('nigeria', 'Nigeria', 'Questions about Nigerian cities, regions and national policy.', 'country', 100, 'seed'),
+    ('philippines', 'Philippines', 'Questions about Philippine cities, regions and national policy.', 'country', 110, 'seed'),
+    ('egypt', 'Egypt', 'Questions about Egyptian cities, regions and national policy.', 'country', 120, 'seed'),
+    ('vietnam', 'Vietnam', 'Questions about Vietnamese cities, regions and national policy.', 'country', 130, 'seed'),
+    ('germany', 'Germany', 'Questions about German cities, regions and national policy.', 'country', 140, 'seed'),
+    ('bangladesh', 'Bangladesh', 'Questions about Bangladeshi cities, regions and national policy.', 'country', 150, 'seed'),
+    ('turkey', 'Türkiye', 'Questions about Turkish cities, regions and national policy.', 'country', 160, 'seed'),
+    ('iran', 'Iran', 'Questions about Iranian cities, regions and national policy.', 'country', 170, 'seed'),
+    ('united-kingdom', 'United Kingdom', 'Questions about British cities, regions and national policy.', 'country', 180, 'seed'),
+    ('thailand', 'Thailand', 'Questions about Thai cities, regions and national policy.', 'country', 190, 'seed'),
+    ('france', 'France', 'Questions about French cities, regions and national policy.', 'country', 200, 'seed'),
+    ('italy', 'Italy', 'Questions about Italian cities, regions and national policy.', 'country', 210, 'seed'),
+    ('south-africa', 'South Africa', 'Questions about South African cities, regions and national policy.', 'country', 220, 'seed'),
+    ('south-korea', 'South Korea', 'Questions about South Korean cities, regions and national policy.', 'country', 230, 'seed'),
+    ('spain', 'Spain', 'Questions about Spanish cities, regions and national policy.', 'country', 240, 'seed'),
+    ('colombia', 'Colombia', 'Questions about Colombian cities, regions and national policy.', 'country', 250, 'seed')
+ON CONFLICT (slug) DO NOTHING;

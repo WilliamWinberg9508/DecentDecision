@@ -449,3 +449,41 @@ a.issue.unread { border-left: 3px solid var(--accent); }
     border-radius: 0;
   }
 }
+
+/* --- forums ------------------------------------------------------------------ */
+
+.crumbs { font-size: 13px; color: var(--muted); margin: 22px 0 -8px; }
+.crumbs a { color: var(--muted); }
+
+/* Wrapped on a wide screen, where all 26 fit in three short rows and nothing
+   is hidden. A scrolling strip on a phone, where wrapping would eat the whole
+   first screen before a single question. */
+.forums-strip {
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 12px;
+  margin: 4px 0 18px; scrollbar-width: thin;
+}
+.forums-strip a {
+  flex: none; font-size: 13px; padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); text-decoration: none;
+  background: var(--card); white-space: nowrap;
+}
+@media (min-width: 700px) { .forums-strip { flex-wrap: wrap; overflow: visible; } }
+.forums-strip a:hover { color: var(--accent); border-color: var(--accent); }
+.forums-strip a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .forums-strip a.on { color: #16171a; } }
+
+.forum-tag {
+  font-size: 12px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--line); white-space: nowrap;
+}
+
+.forum-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.forum-card {
+  display: block; padding: 14px 16px; border: 1px solid var(--line);
+  border-radius: 9px; background: var(--card); color: inherit; text-decoration: none;
+}
+.forum-card:hover { border-color: var(--accent); }
+.forum-card .issue-title { font-size: 18px; }

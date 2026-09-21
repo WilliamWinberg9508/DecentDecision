@@ -68,9 +68,10 @@ def pull_all() -> None:
         subprocess.run(["ollama", "pull", model], check=False)
 
 
-def run_agent(token: str, model: str, system: str, version, limit: int) -> dict:
+def run_agent(token: str, model: str, system: str, version, limit: int,
+              forums: str = "") -> dict:
     headers = {"Authorization": f"Bearer {token}"}
-    queue = httpx.get(f"{ac.API}/agent/issues", headers=headers, timeout=60).json()
+    queue = ac.fetch_queue(headers, forums)
     if isinstance(queue, dict):                       # an error body, not a list
         return {"model": model, "error": queue.get("detail", "unknown")}
     queue = queue[:limit] if limit else queue
@@ -113,20 +114,40 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pull", action="store_true", help="download the models first")
     ap.add_argument("--limit", type=int, default=0, help="questions per agent")
+    ap.add_argument("--forums", default="",
+                    help="only these forums, comma-separated slugs (e.g. "
+                         "japan,brazil). Default: every forum")
+    ap.add_argument("--list-forums", action="store_true",
+                    help="print the forums and their open questions, then exit")
     args = ap.parse_args()
+
+    if args.list_forums:
+        for f in ac.list_forums():
+            print(f"{f['slug']:<18}{f['open_questions']:>5} open   {f['name']}")
+        return
 
     if args.pull:
         pull_all()
 
+    if args.forums:
+        # Check the names once, up front, rather than letting all fifteen
+        # agents discover the same typo one after another.
+        real = {f["slug"] for f in ac.list_forums()}
+        wrong = [s for s in args.forums.split(",") if s.strip() and s.strip() not in real]
+        if wrong:
+            sys.exit(f"unknown forum: {', '.join(wrong)} "
+                     f"(python vote_all.py --list-forums shows the real ones)")
+
     system, version = ac.load_prompt()
     print(f"site: {ac.API}")
     print(f"agents: {len(AGENTS)}")
+    print(f"forums: {args.forums or 'all'}")
     print(f"prompt: {'v' + str(version) if version else 'local'}\n")
 
     results = []
     for token, model in AGENTS:
         print(f"  {model}", flush=True)
-        results.append(run_agent(token, model, system, version, args.limit))
+        results.append(run_agent(token, model, system, version, args.limit, args.forums))
 
     print(f"\n{'model':<34}{'cast':>6}{'drop':>6}{'fail':>6}"
           f"{'sup':>6}{'con':>6}{'opp':>6}{'irr':>6}{'sec':>8}{'s/vote':>8}")

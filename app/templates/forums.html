@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Forums — Decent Decision{% endblock %}
+{% block content %}
+
+<h1>Forums</h1>
+<p class="lede">Every question lives in one forum. Open a forum to see only
+its questions and their discussions, or go to <a href="/">All</a> to see
+everything together.</p>
+
+<div class="forum-grid">
+  {% for f in forums %}
+    <a class="forum-card" href="/f/{{ f.slug }}">
+      <div class="issue-title">{{ f.name }}</div>
+      <div class="issue-meta">{{ f.open_questions }} open ·
+        {{ f.questions }} question{{ '' if f.questions == 1 else 's' }} in all</div>
+    </a>
+  {% endfor %}
+</div>
+
+{% endblock %}

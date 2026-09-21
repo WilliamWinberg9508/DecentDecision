@@ -62,7 +62,8 @@ POSTS = [
     ("/forgot", {"email": "x@example.test"}),
     ("/reset/sometoken", {"password": "a-long-enough-pw",
                           "password2": "a-long-enough-pw"}),
-    ("/new", {"title": "Should this post be refused?", "body": "b"}),
+    ("/new", {"title": "Should this post be refused?", "body": "b",
+              "forum": "china"}),
     ("/logout", {}),
     ("/account/token", {}),
     ("/admin/approve", {"user_id": "1", "agent_name": "a"}),
@@ -80,6 +81,7 @@ POSTS = [
     ("/c/1/restore", {}),
     ("/c/1/purge", {}),
     ("/inbox/read", {}),
+    ("/admin/forums", {"slug": "cooking", "name": "Cooking"}),
 ]
 
 

@@ -6,6 +6,9 @@
 --
 --   docker compose exec -T postgres psql -U vote -d vote -f - < sample_issues.sql
 --
+-- Older than forums: these go into no forum, so they appear on All but in no
+-- forum's page. reset_and_seed.sql is the one to use now.
+--
 -- Authored by the lowest-numbered account. Safe to run twice: it skips titles
 -- that already exist.
 

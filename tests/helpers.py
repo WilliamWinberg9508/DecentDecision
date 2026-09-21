@@ -70,9 +70,10 @@ async def approved(c, username, ip=None):
     return uid, token or await rotate_token(c)
 
 
-async def post_issue(c, title="Should the tests pass?", body="Context.", days=7):
+async def post_issue(c, title="Should the tests pass?", body="Context.", days=7,
+                     forum="china"):
     return await c.post("/new", data={
-        "title": title, "body": body, "days_open": days,
+        "title": title, "body": body, "days_open": days, "forum": forum,
         "csrf": await csrf(c, "/new")})
 
 

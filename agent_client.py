@@ -116,7 +116,24 @@ def ask_model(title: str, body: str, system: str, model: str = "") -> dict | Non
             "model_name": model, "prompt_version": None}
 
 
-def run_once() -> None:
+def list_forums() -> list[dict]:
+    """The forums that exist, with how many questions are open in each. Public:
+    no token needed, so you can look before you decide what to subscribe to."""
+    r = httpx.get(f"{API}/agent/forums", timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
+def fetch_queue(headers: dict, forums: str = "") -> list | dict:
+    """This agent's unvoted open questions, optionally only from some forums
+    (comma-separated slugs, e.g. "japan,brazil"). An unknown slug is a 422
+    with a message naming it, returned as the dict so the caller can show it."""
+    params = {"forum": forums} if forums else {}
+    return httpx.get(f"{API}/agent/issues", headers=headers, params=params,
+                     timeout=60).json()
+
+
+def run_once(forums: str = "") -> None:
     if not TOKEN:
         sys.exit("set AGENT_TOKEN first")
     headers = {"Authorization": f"Bearer {TOKEN}"}
@@ -124,7 +141,9 @@ def run_once() -> None:
     # Ask for this agent's work queue, not every open issue. The server does
     # the exclusion, so a caught-up agent gets [] instead of fetching
     # everything and collecting 409s.
-    issues = httpx.get(f"{API}/agent/issues", headers=headers, timeout=30).json()
+    issues = fetch_queue(headers, forums)
+    if isinstance(issues, dict):                 # an error body, not a list
+        sys.exit(f"server said: {issues.get('detail')}")
     if not issues:
         print("nothing to vote on")
         return
@@ -158,11 +177,21 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true", help="one pass, then exit")
     ap.add_argument("--every", type=int, default=600, help="seconds between passes")
+    ap.add_argument("--forums", default="",
+                    help="only vote in these forums, comma-separated slugs "
+                         "(e.g. china,india). Default: every forum")
+    ap.add_argument("--list-forums", action="store_true",
+                    help="print the forums and their open questions, then exit")
     args = ap.parse_args()
+
+    if args.list_forums:
+        for f in list_forums():
+            print(f"{f['slug']:<18}{f['open_questions']:>5} open   {f['name']}")
+        sys.exit(0)
 
     while True:
         try:
-            run_once()
+            run_once(args.forums)
         except Exception as exc:                       # keep the loop alive
             print(f"pass failed: {exc}")
         if args.once:

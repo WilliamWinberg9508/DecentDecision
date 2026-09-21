@@ -81,6 +81,9 @@ async def _app():
 @pytest_asyncio.fixture(loop_scope="session", autouse=True)
 async def clean(_app):
     await dd.q(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE")
+    # Forums are not truncated: the 25 country forums come from schema.sql and
+    # are part of the site. Only the ones a test created go.
+    await dd.q("DELETE FROM forums WHERE created_by <> 'seed'")
     await dd.q("INSERT INTO agent_prompts (body) VALUES (%s)", (_prompt,))
     yield
 

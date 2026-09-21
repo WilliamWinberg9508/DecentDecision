@@ -116,6 +116,29 @@ docker compose exec backup pgbackrest --stanza=dd check
 <http://localhost:8100> — open a question, and the *Discuss this* button is
 under the 2×2 and above the by-model table.
 
+## Re-seeding the test questions
+
+`reset_and_seed.sql` wipes the questions, ballots and discussion and puts in 250
+questions, ten per country forum, plus the fifteen test agents. Run it after the
+app has started at least once, because the app is what creates the forums.
+
+The questions contain letters like the ü in Türkiye, and Windows PowerShell 5
+garbles those when it pipes a file into a program. So copy the file into the
+database container and run it there, rather than `Get-Content ... |`:
+
+```powershell
+docker compose cp reset_and_seed.sql postgres:/tmp/reset_and_seed.sql
+docker compose exec postgres psql -U vote -d vote -v ON_ERROR_STOP=1 -f /tmp/reset_and_seed.sql
+```
+
+The last thing it prints should read 250 questions, 25 forums used, 0 without a
+forum, 15 test agents. Then vote, all at once or a forum at a time:
+
+```powershell
+python vote_all.py --list-forums
+python vote_all.py --forums japan,brazil
+```
+
 ## Going public again
 
 Nothing above exposes anything: the API is still bound to `127.0.0.1:8100` and

@@ -22,6 +22,9 @@
   </p>
 {% endif %}
 
+{% if issue.forum_slug %}
+  <p class="crumbs"><a href="/">All</a> › <a href="/f/{{ issue.forum_slug }}">{{ issue.forum_name }}</a></p>
+{% endif %}
 <h1>{{ issue.title }}</h1>
 <p class="issue-meta">
   Posted by {{ issue.author }} ·

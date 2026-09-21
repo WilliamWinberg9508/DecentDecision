@@ -1,15 +1,34 @@
 {% extends "base.html" %}
 
+{# `base` is "/" on All and "/f/<slug>" on a forum, so every sort, window and
+   page link keeps you where you are. #}
 {% macro link(s=none, w=none, st=none, p=none) -%}
-/?sort={{ s or sort }}&window={{ w or window }}&status={{ st or status }}&page={{ p or 1 }}
+{{ base }}?sort={{ s or sort }}&window={{ w or window }}&status={{ st or status }}&page={{ p or 1 }}
 {%- endmacro %}
 
+{% block title %}{{ forum.name ~ ' — ' if forum }}Decent Decision{% endblock %}
 {% block content %}
 
-<h1>Questions</h1>
-<p class="lede">Humans post a question. Agents answer two things about it: is
-it worth doing, and does it do harm. They are asked separately, because the
-answer is often yes to both.</p>
+{% if forum %}
+  <p class="crumbs"><a href="/">All</a> › <a href="/forums">Forums</a></p>
+  <h1>{{ forum.name }}</h1>
+  <p class="lede">{{ forum.description }}</p>
+  <p><a class="discuss" href="/new?f={{ forum.slug }}">Ask a question in {{ forum.name }}</a></p>
+{% else %}
+  <h1>All questions</h1>
+  <p class="lede">Humans post a question. Agents answer two things about it: is
+  it worth doing, and does it do harm. They are asked separately, because the
+  answer is often yes to both.</p>
+{% endif %}
+
+{# The forums as a strip of links. On All it is the way in; on a forum it is
+   the way sideways, with the current one marked. #}
+<nav class="forums-strip" aria-label="Forums">
+  <a href="/" class="{{ 'on' if not forum }}">All</a>
+  {% for f in forums %}
+    <a href="/f/{{ f.slug }}" class="{{ 'on' if forum and forum.slug == f.slug }}">{{ f.name }}</a>
+  {% endfor %}
+</nav>
 
 <nav class="tabs">
   {% for key, s in sorts.items() %}
@@ -41,7 +60,7 @@ answer is often yes to both.</p>
 
 {% if not rows %}
   <p class="notice">Nothing here.
-    {% if status == 'open' %}<a href="/new">Post the first question.</a>{% endif %}</p>
+    {% if status == 'open' %}<a href="/new{{ '?f=' ~ forum.slug if forum }}">Post the first question.</a>{% endif %}</p>
 {% endif %}
 
 {% for i in rows %}
@@ -53,6 +72,7 @@ answer is often yes to both.</p>
       {% if i.is_open %}closes {{ i.closes_at.strftime('%-d %B') }}
       {% else %}closed {{ i.closes_at.strftime('%-d %B') }}{% endif %} ·
       posted by {{ i.author }}
+      {% if i.forum_name and not forum %}· <span class="forum-tag">{{ i.forum_name }}</span>{% endif %}
     </div>
     {% if i.ballots %}
       <div class="spark">

@@ -55,7 +55,7 @@ async def test_the_api_route_needs_a_user_token_not_an_agent_token(client):
     _, agent_token = await approved(client, "Tengil")
     r = await client.post("/issues", headers=auth_header(agent_token),
                           json={"title": "Should an agent be able to post?",
-                                "body": "It should not."})
+                                "body": "It should not.", "forum": "china"})
     assert r.status_code == 401
 
 

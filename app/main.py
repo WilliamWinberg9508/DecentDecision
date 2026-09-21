@@ -265,6 +265,46 @@ class IssueIn(BaseModel):
     title: str = Field(min_length=10, max_length=200)
     body: str = Field(min_length=1, max_length=8000)
     days_open: int = Field(default=7, ge=1, le=90)
+    forum: str = Field(min_length=2, max_length=40)      # a forum slug
+
+
+# --- forums ----------------------------------------------------------------------
+
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
+
+
+async def forum_by_slug(slug: str) -> dict | None:
+    return await q("SELECT * FROM forums WHERE slug = %s", (slug.strip().lower(),),
+                   one=True)
+
+
+async def forums_with_counts() -> list[dict]:
+    """Every forum, with how many questions are open in it. One grouped query
+    rather than one per forum; the partial index on (forum_id) makes the
+    count an index scan."""
+    return await q(
+        """SELECT f.slug, f.name, f.description, f.kind,
+                  count(i.id) FILTER (WHERE i.closes_at > now()) AS open_questions,
+                  count(i.id) AS questions
+             FROM forums f
+        LEFT JOIN issues i ON i.forum_id = f.id AND i.removed_at IS NULL
+         GROUP BY f.id ORDER BY f.position, f.name""")
+
+
+async def forum_ids(param: str | None) -> list[int] | None:
+    """Parse ?forum=india,brazil into ids. None means every forum. An unknown
+    slug is an error rather than silently nothing: an agent configured with a
+    typo should be told, not handed an empty queue that looks like 'caught
+    up'."""
+    if not param:
+        return None
+    slugs = [s.strip().lower() for s in param.split(",") if s.strip()]
+    rows = await q("SELECT id, slug FROM forums WHERE slug = ANY(%s)", (slugs,))
+    unknown = sorted(set(slugs) - {r["slug"] for r in rows})
+    if unknown:
+        raise HTTPException(422, f"unknown forum: {', '.join(unknown)} -- "
+                                 f"GET /agent/forums lists the real ones")
+    return [r["id"] for r in rows]
 
 
 class Ballot(BaseModel):
@@ -642,23 +682,39 @@ async def approve(user_id: int, body: Approval):
 async def post_issue(i: IssueIn, user: dict = Depends(current_user)):
     if err := bad_title(i.title):
         raise HTTPException(422, err)
+    forum = await forum_by_slug(i.forum)
+    if not forum:
+        raise HTTPException(422, "unknown forum -- GET /agent/forums lists them")
     closes = datetime.now(timezone.utc) + timedelta(days=i.days_open)
     row = await q(
-        """INSERT INTO issues (author_id, title, body, closes_at)
-           VALUES (%s, %s, %s, %s) RETURNING id, title, closes_at""",
-        (user["id"], clean(i.title), clean(i.body), closes), one=True)
-    return row
+        """INSERT INTO issues (author_id, forum_id, title, body, closes_at)
+           VALUES (%s, %s, %s, %s, %s) RETURNING id, title, closes_at""",
+        (user["id"], forum["id"], clean(i.title), clean(i.body), closes), one=True)
+    return {**row, "forum": forum["slug"]}
 
 
 @app.get("/issues/open")
-async def open_issues():
-    """What an agent polls. Body text is returned as data -- the client is
-    responsible for never letting it reach the model as an instruction."""
+async def open_issues(forum: str | None = None):
+    """Open questions, optionally from some forums only (?forum=india,brazil).
+    Body text is returned as data -- the client is responsible for never
+    letting it reach the model as an instruction."""
+    ids = await forum_ids(forum)
     return await q(
-        """SELECT i.id, i.title, i.body, i.closes_at, u.display_name AS author
+        """SELECT i.id, i.title, i.body, i.closes_at, u.display_name AS author,
+                  f.slug AS forum
              FROM issues i JOIN users u ON u.id = i.author_id
+        LEFT JOIN forums f ON f.id = i.forum_id
             WHERE i.closes_at > now() AND i.removed_at IS NULL
-         ORDER BY i.created_at DESC""")
+              AND (%s::int[] IS NULL OR i.forum_id = ANY(%s::int[]))
+         ORDER BY i.created_at DESC""", (ids, ids))
+
+
+@app.get("/agent/forums")
+async def agent_forums():
+    """The forums an agent can choose between, with how much is open in each.
+    Public, like the prompt: which forums exist is not a secret, and a client
+    should be able to list them before it has a token configured."""
+    return await forums_with_counts()
 
 
 @app.get("/agent/prompt")
@@ -673,7 +729,8 @@ async def agent_prompt():
 
 
 @app.get("/agent/issues")
-async def agent_issues(agent: dict = Depends(current_agent)):
+async def agent_issues(forum: str | None = None,
+                       agent: dict = Depends(current_agent)):
     """Open issues this agent has not voted on yet — its actual work queue.
 
     Doing the exclusion here rather than in the client means an agent that has
@@ -682,13 +739,20 @@ async def agent_issues(agent: dict = Depends(current_agent)):
     # Capped: an agent that has been offline for a month should get a batch it
     # can actually work through, not every open issue on the site in one
     # response. It simply asks again when it has finished these.
+    #
+    # ?forum=india,brazil narrows it to those forums; with no forum given the
+    # agent gets questions from all of them, which is what it did before
+    # forums existed.
+    ids = await forum_ids(forum)
     return await q(
-        """SELECT i.id, i.title, i.body, i.closes_at
+        """SELECT i.id, i.title, i.body, i.closes_at, f.slug AS forum
              FROM issues i
+        LEFT JOIN forums f ON f.id = i.forum_id
             WHERE i.closes_at > now() AND i.removed_at IS NULL
+              AND (%s::int[] IS NULL OR i.forum_id = ANY(%s::int[]))
               AND NOT EXISTS (SELECT 1 FROM votes v
                                WHERE v.issue_id = i.id AND v.agent_id = %s)
-         ORDER BY i.created_at LIMIT 100""", (agent["id"],))
+         ORDER BY i.created_at LIMIT 100""", (ids, ids, agent["id"]))
 
 
 @app.get("/issues/{issue_id}/results")
@@ -830,7 +894,8 @@ WINDOWS = {"day": ("Today", "1 day"), "week": ("This week", "7 days"),
            "month": ("This month", "30 days"), "all": ("All time", None)}
 
 
-async def browse(sort: str, window: str, status: str, page: int):
+async def browse(sort: str, window: str, status: str, page: int,
+                 forum: dict | None = None):
     """One paginated listing. Every branch reads the counters on the issue row,
     so sorting by sentiment costs the same as sorting by date."""
     sort = sort if sort in SORTS else "new"
@@ -840,6 +905,9 @@ async def browse(sort: str, window: str, status: str, page: int):
     # Removed questions are invisible everywhere a list is built. The issue
     # page is the one exception: it shows a tombstone so a link does not rot.
     clauses, params = ["i.removed_at IS NULL"], []
+    if forum:
+        clauses.append("i.forum_id = %s")
+        params.append(forum["id"])
     if status == "open":
         clauses.append("i.closes_at > now()")
     elif status == "closed":
@@ -859,8 +927,10 @@ async def browse(sort: str, window: str, status: str, page: int):
                    u.display_name AS author,
                    i.ballots, i.supported, i.contested, i.opposed, i.irrelevant,
                    i.comment_count,
+                   f.slug AS forum_slug, f.name AS forum_name,
                    i.closes_at > now() AS is_open
               FROM issues i JOIN users u ON u.id = i.author_id
+         LEFT JOIN forums f ON f.id = i.forum_id
              WHERE {where}
           ORDER BY {SORTS[sort][1]}
              LIMIT %s OFFSET %s""",
@@ -876,16 +946,46 @@ async def browse(sort: str, window: str, status: str, page: int):
 @app.get("/", response_class=HTMLResponse)
 async def page_index(request: Request, sort: str = "new", window: str = "all",
                      status: str = "open", page: int = 1):
+    """All: every question from every forum."""
     view = await browse(sort, window, status, page)
-    view["user"] = await session_user(request)
+    view.update(user=await session_user(request), forum=None, base="/",
+                forums=await forums_with_counts())
     return render(request, "index.html", view)
+
+
+@app.get("/all")
+async def page_all():
+    return RedirectResponse("/", status_code=301)
+
+
+@app.get("/f/{slug}", response_class=HTMLResponse)
+async def page_forum(request: Request, slug: str, sort: str = "new",
+                     window: str = "all", status: str = "open", page: int = 1):
+    """One forum: the front page, narrowed to its questions. Same sorts, same
+    windows, same pagination -- the links just keep the forum in the path."""
+    forum = await forum_by_slug(slug)
+    if not forum:
+        raise HTTPException(404, "no such forum")
+    view = await browse(sort, window, status, page, forum=forum)
+    view.update(user=await session_user(request), forum=forum,
+                base=f"/f/{forum['slug']}", forums=await forums_with_counts())
+    return render(request, "index.html", view)
+
+
+@app.get("/forums", response_class=HTMLResponse)
+async def page_forums(request: Request):
+    return render(request, "forums.html", {
+        "user": await session_user(request),
+        "forums": await forums_with_counts()})
 
 
 @app.get("/i/{issue_id}", response_class=HTMLResponse)
 async def page_issue(request: Request, issue_id: int):
     issue = await q(
-        """SELECT i.*, u.display_name AS author FROM issues i
-             JOIN users u ON u.id = i.author_id WHERE i.id = %s""",
+        """SELECT i.*, u.display_name AS author,
+                  f.slug AS forum_slug, f.name AS forum_name
+             FROM issues i JOIN users u ON u.id = i.author_id
+        LEFT JOIN forums f ON f.id = i.forum_id WHERE i.id = %s""",
         (issue_id,), one=True)
     if not issue:
         raise HTTPException(404, "no such issue")
@@ -1016,36 +1116,46 @@ async def page_remove_vote(request: Request, vote_id: int, csrf: str = Form(""))
 
 
 @app.get("/new", response_class=HTMLResponse)
-async def page_new(request: Request):
+async def page_new(request: Request, f: str = ""):
+    """?f=india preselects the forum, which is how the 'Ask a question' link
+    on a forum's page arrives here."""
     user = await session_user(request)
     if not user:
-        return RedirectResponse("/login?next=/new", status_code=303)
+        nxt = f"/new?f={f}" if SLUG_RE.match(f or "") else "/new"
+        return RedirectResponse(f"/login?next={nxt}", status_code=303)
     return render(request, "new.html",
-                                      {"user": user, "form": {}, "error": None})
+                  {"user": user, "form": {"forum": f}, "error": None,
+                   "forums": await forums_with_counts()})
 
 
 @app.post("/new", response_class=HTMLResponse)
 async def page_new_submit(request: Request, title: str = Form(...),
                           body: str = Form(...), days_open: int = Form(7),
-                          csrf: str = Form("")):
+                          forum: str = Form(""), csrf: str = Form("")):
     check_csrf(request, csrf)
     user = await session_user(request)
     if not user:
         return RedirectResponse("/login?next=/new", status_code=303)
+
+    async def again(error, code):
+        return render(request, "new.html", {
+            "user": user, "form": {"title": title, "body": body, "forum": forum},
+            "forums": await forums_with_counts(), "error": error},
+            status_code=code)
+
     if user["status"] != "approved":
-        return render(request, "new.html", {
-            "user": user, "form": {"title": title, "body": body},
-            "error": "Your account is still awaiting approval."}, status_code=403)
+        return await again("Your account is still awaiting approval.", 403)
     if err := bad_title(title):
-        return render(request, "new.html", {
-            "user": user, "form": {"title": title, "body": body},
-            "error": err}, status_code=422)
+        return await again(err, 422)
+    chosen = await forum_by_slug(forum) if forum else None
+    if not chosen:
+        return await again("Choose the forum this question belongs in.", 422)
 
     closes = datetime.now(timezone.utc) + timedelta(days=max(1, min(days_open, 90)))
     row = await q(
-        """INSERT INTO issues (author_id, title, body, closes_at)
-           VALUES (%s, %s, %s, %s) RETURNING id""",
-        (user["id"], clean(title), clean(body), closes), one=True)
+        """INSERT INTO issues (author_id, forum_id, title, body, closes_at)
+           VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+        (user["id"], chosen["id"], clean(title), clean(body), closes), one=True)
     return RedirectResponse(f"/i/{row['id']}", status_code=303)
 
 
@@ -1644,10 +1754,11 @@ async def _admin_page(request: Request, admin: dict, done: str | None = None,
              FROM votes GROUP BY 1 ORDER BY n DESC LIMIT 6""")
     log = await q("SELECT at, actor, action, target, detail FROM audit_log "
                   "ORDER BY at DESC LIMIT 40")
+    forums = await forums_with_counts()
 
     return render(request, "admin.html", {
         "user": admin, "pending": pending, "members": members, "done": done,
-        "prompt": prompt, "usage": usage, "log": log,
+        "prompt": prompt, "usage": usage, "log": log, "forums": forums,
         "fresh_admin_token": fresh_admin_token,
         "env_token_live": not await config_get("admin_token_hash"),
         "smtp": bool(SMTP_HOST), "site_url": SITE_URL})
@@ -1703,6 +1814,32 @@ async def page_admin_prompt(request: Request, body: str = Form(...),
                   "RETURNING version", (body.strip(), admin["id"]), one=True)
     await audit(admin, "prompt.publish", f"version {row['version']}")
     return RedirectResponse("/admin?done=prompt", status_code=303)
+
+
+@app.post("/admin/forums")
+async def page_admin_forum(request: Request, name: str = Form(...),
+                           slug: str = Form(...), description: str = Form(""),
+                           kind: str = Form("topic"), csrf: str = Form("")):
+    """Admins only, for now. Forums are cheap to create and expensive to tidy
+    up once people are posting in near-duplicates of each other."""
+    check_csrf(request, csrf)
+    admin = await require_web_admin(request)
+    if not admin:
+        raise HTTPException(404, "not found")
+    slug, name = slug.strip().lower(), clean(name)[:60]
+    if not SLUG_RE.match(slug) or not name:
+        return RedirectResponse("/admin?done=forum-invalid#forums", status_code=303)
+    row = await q(
+        """INSERT INTO forums (slug, name, description, kind, created_by)
+           VALUES (%s, %s, %s, %s, %s)
+           ON CONFLICT (slug) DO NOTHING RETURNING id""",
+        (slug, name, clean(description)[:300],
+         kind if kind in ("country", "topic") else "topic", admin["username"]),
+        one=True)
+    if not row:
+        return RedirectResponse("/admin?done=forum-taken#forums", status_code=303)
+    await audit(admin, "forum.create", slug, name)
+    return RedirectResponse(f"/f/{slug}", status_code=303)
 
 
 @app.post("/admin/reject")

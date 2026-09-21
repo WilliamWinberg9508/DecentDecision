@@ -28,7 +28,7 @@ Section "schema: the new tables are there" {
     docker compose exec -T postgres psql -U vote -d vote -c "\dt"
 }
 Section "row counts" {
-    docker compose exec -T postgres psql -U vote -d vote -c "SELECT 'users' t, count(*) FROM users UNION ALL SELECT 'issues', count(*) FROM issues UNION ALL SELECT 'votes', count(*) FROM votes UNION ALL SELECT 'comments', count(*) FROM comments UNION ALL SELECT 'notifications', count(*) FROM notifications ORDER BY 1;"
+    docker compose exec -T postgres psql -U vote -d vote -c "SELECT 'users' t, count(*) FROM users UNION ALL SELECT 'forums', count(*) FROM forums UNION ALL SELECT 'issues', count(*) FROM issues UNION ALL SELECT 'votes', count(*) FROM votes UNION ALL SELECT 'comments', count(*) FROM comments UNION ALL SELECT 'notifications', count(*) FROM notifications ORDER BY 1;"
 }
 Section "tallies agree with the ballots" {
     docker compose exec -T postgres psql -U vote -d vote -c "SELECT count(*) AS issues_whose_counters_disagree FROM issues i WHERE i.ballots <> (SELECT count(*) FROM votes v WHERE v.issue_id = i.id);"
