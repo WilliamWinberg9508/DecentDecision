@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
-"""Run all ten test agents, each on a different small model.
+"""Run the fifteen test agents, each on a different model under 1B parameters.
 
-    python vote_all.py --pull     # download the ten models first (~17 GB)
-    python vote_all.py            # vote
-    python vote_all.py --limit 10 # only the first 10 questions each
+    python vote_all.py --pull      # download the models first, about 7 GB
+    python vote_all.py             # vote
+    python vote_all.py --limit 5   # only the first 5 questions each
 
-Pairs with reset_and_seed.sql, which creates the ten accounts and their
-tokens. Those tokens are predictable by design so this script needs no
-configuration -- which is exactly why the accounts must not exist on a public
-instance.
+Pairs with reset_and_seed.sql, which creates the fifteen accounts and their
+tokens. The two lists must match -- token dd-test-07 is qwen:0.5b-chat in both.
+The tokens are predictable by design so this script needs no configuration,
+which is exactly why the accounts must not exist on a public instance.
 
-It works through one model at a time rather than one question at a time. That
-matters on a single GPU: Ollama keeps one model resident, so alternating
-between ten of them would reload weights on every single ballot. Model-major
-order loads each set of weights once.
+Eleven genuinely different sets of weights, plus four quantization variants
+kept as comparisons. qwen2.5:0.5b runs three times -- at q2_K, the default
+q4_K_M and fp16 -- so where those three disagree, quantization is the only
+thing that differs. That is the site's claim about configuration, at the
+smallest scale it can be shown.
+
+**Expect dropped ballots.** The client accepts only a reply that parses as
+exactly two booleans, and a 135M model often cannot manage that. A dropped
+reply is the client refusing to guess, not a failure -- but it means this set
+tests the pipeline rather than the judgement. The summary counts drops per
+model, which at this size is the most interesting column.
+
+It works through one model at a time rather than one question at a time.
+Ollama keeps one model resident, so alternating would reload weights on every
+ballot; model-major order loads each set once.
 """
 
 import argparse
@@ -25,18 +36,26 @@ import httpx
 
 import agent_client as ac
 
-# (token, model). One account per model, matching reset_and_seed.sql.
+# (token, model). Must match the list in reset_and_seed.sql. Every tag here was
+# checked against the Ollama library rather than recalled -- a mistyped tag
+# fails at `ollama pull`, the least useful moment to find out. llama3.2:1b is
+# deliberately absent: at 1.24B it is over the line however it is marketed.
 AGENTS = [
-    ("dd-test-01", "qwen3:0.6b"),
-    ("dd-test-02", "qwen3:1.7b"),
-    ("dd-test-03", "qwen3:4b"),
-    ("dd-test-04", "llama3.2:1b"),
-    ("dd-test-05", "llama3.2:3b"),
-    ("dd-test-06", "gemma3:1b"),
-    ("dd-test-07", "gemma3:4b"),
-    ("dd-test-08", "phi4-mini:3.8b"),
-    ("dd-test-09", "qwen2.5:1.5b"),
-    ("dd-test-10", "qwen2.5:3b"),
+    ("dd-test-01", "qwen3:0.6b"),                      # qwen3-06b
+    ("dd-test-02", "qwen3:0.6b-q8_0"),                 # qwen3-06b-q8
+    ("dd-test-03", "qwen2.5:0.5b"),                    # qwen25-05b
+    ("dd-test-04", "qwen2.5:0.5b-instruct-q2_K"),      # qwen25-05b-q2k
+    ("dd-test-05", "qwen2.5:0.5b-instruct-fp16"),      # qwen25-05b-fp16
+    ("dd-test-06", "qwen2:0.5b"),                      # qwen2-05b
+    ("dd-test-07", "qwen:0.5b-chat"),                  # qwen15-05b
+    ("dd-test-08", "gemma3:270m"),                     # gemma3-270m
+    ("dd-test-09", "gemma3:270m-it-q8_0"),             # gemma3-270m-q8
+    ("dd-test-10", "smollm2:360m"),                    # smollm2-360m
+    ("dd-test-11", "smollm2:135m"),                    # smollm2-135m
+    ("dd-test-12", "smollm:360m-instruct-v0.2-q8_0"),  # smollm-360m
+    ("dd-test-13", "smollm:135m-instruct-v0.2-q8_0"),  # smollm-135m
+    ("dd-test-14", "granite4:350m"),                   # granite4-350m
+    ("dd-test-15", "granite4:350m-h"),                 # granite4-350m-h
 ]
 
 QUADRANT = {(True, False): "supported", (True, True): "contested",
@@ -101,6 +120,7 @@ def main() -> None:
 
     system, version = ac.load_prompt()
     print(f"site: {ac.API}")
+    print(f"agents: {len(AGENTS)}")
     print(f"prompt: {'v' + str(version) if version else 'local'}\n")
 
     results = []
@@ -108,15 +128,15 @@ def main() -> None:
         print(f"  {model}", flush=True)
         results.append(run_agent(token, model, system, version, args.limit))
 
-    print(f"\n{'model':<18}{'cast':>6}{'drop':>6}{'fail':>6}"
+    print(f"\n{'model':<34}{'cast':>6}{'drop':>6}{'fail':>6}"
           f"{'sup':>6}{'con':>6}{'opp':>6}{'irr':>6}{'sec':>8}{'s/vote':>8}")
-    print("-" * 78)
+    print("-" * 94)
     for s in results:
         if "error" in s:
-            print(f"{s['model']:<18}  error: {s['error']}")
+            print(f"{s['model']:<34}  error: {s['error']}")
             continue
         per = s["seconds"] / s["cast"] if s["cast"] else 0
-        print(f"{s['model']:<18}{s['cast']:>6}{s['dropped']:>6}{s['failed']:>6}"
+        print(f"{s['model']:<34}{s['cast']:>6}{s['dropped']:>6}{s['failed']:>6}"
               f"{s['supported']:>6}{s['contested']:>6}{s['opposed']:>6}"
               f"{s['irrelevant']:>6}{s['seconds']:>8.0f}{per:>8.1f}")
 
@@ -124,8 +144,9 @@ def main() -> None:
     drops = sum(s.get("dropped", 0) for s in results)
     print(f"\n{total} ballots cast, {drops} replies dropped as unparseable.")
     if drops:
-        print("Dropped replies are the smaller models failing to produce two "
-              "booleans. That is the client refusing to guess, not an error.")
+        print("Dropped replies are models failing to produce two booleans. That "
+              "is the client refusing to guess, not an error -- and at this size "
+              "it is expected, sometimes for most of a model's attempts.")
 
 
 if __name__ == "__main__":
