@@ -45,8 +45,13 @@ async def lifespan(_app: FastAPI):
     # Sized per worker process. With 4 workers this is at most 40 backends,
     # against Postgres's default max_connections of 100. Raise both together
     # or neither.
+    # check= tests each connection as it is handed out and replaces a dead one.
+    # Without it, a Postgres restart (a rebuild, an update, a crash) leaves
+    # every pooled connection dead, and each is found out by a visitor as a
+    # 500 -- until the pool has burned through them all.
     pool = AsyncConnectionPool(DSN, kwargs={"row_factory": dict_row}, open=False,
-                               min_size=2, max_size=10)
+                               min_size=2, max_size=10,
+                               check=AsyncConnectionPool.check_connection)
     await pool.open()
 
     # Every worker runs the schema at startup, and concurrent DDL on the same

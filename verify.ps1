@@ -13,7 +13,9 @@ function Section($title, $block) {
     catch { Add-Content $out "FAILED: $_" }
 }
 
-Section "containers" { docker compose ps --format "{{.Service}}`t{{.Status}}" }
+Section "containers" { docker compose ps -a --format "{{.Service}}`t{{.Status}}" }
+Section "api log, last 80"      { docker compose logs --no-color --tail 80 api }
+Section "postgres log, last 40" { docker compose logs --no-color --tail 40 postgres }
 Section "api health"  { curl.exe -s -m 10 http://localhost:8100/healthz }
 Section "api http status on the main pages" {
     foreach ($p in "/", "/login", "/register", "/healthz") {
@@ -22,7 +24,12 @@ Section "api http status on the main pages" {
     }
 }
 Section "settings the app actually got" {
-    docker compose exec -T api sh -c 'env | grep -E "^(SITE_URL|COOKIE_SECURE|ABUSE_CONTACT|AUTO_APPROVE_VERIFIED|SMTP_HOST|LOGIN_FAILS|RESET_TTL)" | sort'
+    # One printenv per name: PowerShell 5 mangles the quotes a grep pattern
+    # needs on its way to a native command. None of these are secrets.
+    foreach ($k in "SITE_URL","COOKIE_SECURE","ABUSE_CONTACT","AUTO_APPROVE_VERIFIED",
+                   "SMTP_HOST","LOGIN_FAILS_PER_IP","LOGIN_FAILS_PER_ACCOUNT","RESET_TTL_MINUTES") {
+        "$k=" + (docker compose exec -T api printenv $k)
+    }
 }
 Section "schema: the new tables are there" {
     docker compose exec -T postgres psql -U vote -d vote -c "\dt"
