@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from psycopg.rows import dict_row
@@ -465,6 +465,7 @@ async def create_user(username: str, email: str, password: str, note: str = ""):
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SITE_URL = os.environ.get("SITE_URL", "http://localhost:8100").rstrip("/")
+templates.env.globals["site_url"] = SITE_URL
 
 
 def send_mail(to: str, subject: str, body: str) -> None:
@@ -778,6 +779,15 @@ async def cast(request: Request, issue_id: int, ballot: Ballot,
         await q("UPDATE agents SET model_name = %s WHERE id = %s", (model, agent["id"]))
 
     return {"vote_id": row["id"], "good": ballot.good, "bad": ballot.bad}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Browsers ask for /favicon.ico at the root whatever the page says, and
+    so do feed readers and link unfurlers that never see the HTML. Without
+    this, every one of those is a 404 in the log."""
+    return FileResponse(os.path.join(HERE, "static", "favicon.ico"),
+                        media_type="image/x-icon")
 
 
 @app.get("/healthz")

@@ -49,7 +49,9 @@ async def test_user_content_is_escaped_on_the_way_out(client, sql):
     page = (await client.get(f"/i/{iid}")).text
     assert "<script>alert(1)</script>" not in page
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page   # visible, inert
-    assert "<img" not in page, "an attribute payload survived as a real tag"
+    # Precise on purpose: the page has a real <img> of its own now (the logo),
+    # so what is asserted is that the *injected* one did not survive as a tag.
+    assert "<img src=x" not in page, "an attribute payload survived as a real tag"
     assert "&lt;img src=x onerror=alert(2)&gt;" in page
 
 
@@ -190,3 +192,20 @@ async def test_health_check_answers_without_a_session(browser):
     c = await browser("198.51.100.60")
     r = await c.get("/healthz")
     assert r.status_code == 200 and r.json() == {"ok": True}
+
+
+async def test_the_logo_and_icons_are_served(client):
+    """The header, the tab icon and the link preview all point at files that
+    have to exist -- a missing one is a broken image on every single page."""
+    page = (await client.get("/")).text
+    assert '<img src="/static/logo-mark.png" alt=""' in page
+    for path, kind in [("/favicon.ico", "image/"),
+                       ("/static/logo-mark.png", "image/png"),
+                       ("/static/favicon-32.png", "image/png"),
+                       ("/static/apple-touch-icon.png", "image/png"),
+                       ("/static/og-card.jpg", "image/jpeg")]:
+        r = await client.get(path)
+        assert r.status_code == 200, path
+        assert r.headers["content-type"].startswith(kind), path
+    # Link previews need an absolute URL, built from SITE_URL.
+    assert 'content="http://dd.test/static/og-card.jpg"' in page

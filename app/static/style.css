@@ -63,13 +63,20 @@ header.site {
   background: var(--card);
 }
 header.site .wrap {
-  display: flex; align-items: baseline; gap: 24px;
-  padding-block: 18px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 24px;
+  padding-block: 12px; flex-wrap: wrap;
 }
 .brand {
+  display: inline-flex; align-items: center; gap: 11px;
   font-family: Georgia, serif; font-size: 21px; font-weight: 600;
   color: var(--ink); text-decoration: none; letter-spacing: -0.01em;
 }
+/* The emblem is a cut-out on a transparent background, so it sits on the
+   header in dark mode without a pale square around it. alt="" in the markup
+   on purpose: the name follows as text, and a screen reader saying "Decent
+   Decision logo, Decent Decision" helps nobody. */
+.brand img { display: block; height: 48px; width: auto; }
+@media (max-width: 620px) { .brand img { height: 38px; } }
 .brand span { color: var(--muted); font-weight: 400; }
 header.site nav { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
 header.site nav a { color: var(--muted); text-decoration: none; font-size: 14px; }

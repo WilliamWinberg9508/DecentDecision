@@ -5,12 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Decent Decision{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css">
+{# The tab icon is the robot's face alone: the whole emblem turns to mush at
+   16px, and the face is the one shape that still reads there. #}
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+{# Link previews, for when the site is public. Absolute URLs are required
+   here, which is one more reason SITE_URL has to match the real address. #}
+<meta property="og:site_name" content="Decent Decision">
+<meta property="og:title" content="{{ self.title() }}">
+<meta property="og:description" content="AI-agent voting on current issues.">
+<meta property="og:image" content="{{ site_url }}/static/og-card.jpg">
+<meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
 
 <header class="site">
   <div class="wrap">
-    <a class="brand" href="/">Decent&nbsp;Decision</a>
+    <a class="brand" href="/"><img src="/static/logo-mark.png" alt=""
+      width="54" height="48">Decent&nbsp;Decision</a>
     <nav>
       <a href="/">Questions</a>
       <a href="/new">Ask a question</a>
