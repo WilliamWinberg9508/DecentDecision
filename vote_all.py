@@ -51,43 +51,61 @@ def pull_all() -> None:
         subprocess.run(["ollama", "pull", model], check=False)
 
 
+def queue_all(headers: dict, forums: str, limit: int):
+    """Yield every open question this agent has not voted on. The server hands
+    out at most 100 at a time, so ask again after each batch. A question the
+    model failed to answer stays in the queue and comes back; it is skipped
+    rather than asked forever, and the loop ends when a batch has nothing new."""
+    seen: set[int] = set()
+    while True:
+        batch = ac.fetch_queue(headers, forums)
+        if isinstance(batch, dict):                   # an error body, not a list
+            raise RuntimeError(batch.get("detail", "unknown"))
+        fresh = [i for i in batch if i["id"] not in seen]
+        if not fresh:
+            return
+        for issue in fresh:
+            if limit and len(seen) >= limit:
+                return
+            seen.add(issue["id"])
+            yield issue
+
+
 def run_agent(token: str, model: str, system: str, version, limit: int,
               forums: str = "") -> dict:
     headers = {"Authorization": f"Bearer {token}"}
-    queue = ac.fetch_queue(headers, forums)
-    if isinstance(queue, dict):                       # an error body, not a list
-        return {"model": model, "error": queue.get("detail", "unknown")}
-    queue = queue[:limit] if limit else queue
-
     stats = {"model": model, "cast": 0, "dropped": 0, "failed": 0,
              "supported": 0, "contested": 0, "opposed": 0, "irrelevant": 0}
     started = time.perf_counter()
 
-    for n, issue in enumerate(queue, 1):
-        try:
-            ballot = ac.ask_model(issue["title"], issue["body"], system, model)
-        except Exception as exc:
-            stats["failed"] += 1
-            print(f"    ! {model}: {type(exc).__name__}", flush=True)
-            continue
+    try:
+        for n, issue in enumerate(queue_all(headers, forums, limit), 1):
+            try:
+                ballot = ac.ask_model(issue["title"], issue["body"], system, model)
+            except Exception as exc:
+                stats["failed"] += 1
+                print(f"    ! {model}: {type(exc).__name__}", flush=True)
+                continue
 
-        if ballot is None:
-            # Not a crash: the model said something that was not two booleans,
-            # so no ballot is cast. A dropped vote beats a guessed one.
-            stats["dropped"] += 1
-            continue
+            if ballot is None:
+                # Not a crash: the model said something that was not two
+                # booleans, so no ballot is cast. A dropped vote beats a guessed one.
+                stats["dropped"] += 1
+                continue
 
-        ballot["prompt_version"] = version
-        r = httpx.post(f"{ac.API}/issues/{issue['id']}/vote",
-                       headers=headers, json=ballot, timeout=60)
-        if r.status_code == 201:
-            stats["cast"] += 1
-            stats[QUADRANT[(ballot["good"], ballot["bad"])]] += 1
-        elif r.status_code != 409:                    # 409 = already voted
-            stats["failed"] += 1
+            ballot["prompt_version"] = version
+            r = httpx.post(f"{ac.API}/issues/{issue['id']}/vote",
+                           headers=headers, json=ballot, timeout=60)
+            if r.status_code == 201:
+                stats["cast"] += 1
+                stats[QUADRANT[(ballot["good"], ballot["bad"])]] += 1
+            elif r.status_code != 409:                # 409 = already voted
+                stats["failed"] += 1
 
-        if n % 10 == 0:
-            print(f"    {model}: {n}/{len(queue)}", flush=True)
+            if n % 25 == 0:
+                print(f"    {model}: {n} done", flush=True)
+    except RuntimeError as exc:
+        return {"model": model, "error": str(exc)}
 
     stats["seconds"] = time.perf_counter() - started
     return stats
