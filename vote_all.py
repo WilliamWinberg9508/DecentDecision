@@ -1,26 +1,20 @@
 #!/usr/bin/env python3
-"""Run the fifteen test agents, each on a different model under 1B parameters.
+"""Run the five test agents, each on a different model that fits an RTX 3060.
 
-    python vote_all.py --pull      # download the models first, about 7 GB
-    python vote_all.py             # vote
-    python vote_all.py --limit 5   # only the first 5 questions each
+    python vote_all.py --pull           # download the models first, about 38 GB
+    python vote_all.py                  # vote on everything open
+    python vote_all.py --forums japan   # only some forums
+    python vote_all.py --limit 5        # only the first 5 questions each
 
-Pairs with reset_and_seed.sql, which creates the fifteen accounts and their
-tokens. The two lists must match -- token dd-test-07 is qwen:0.5b-chat in both.
+Pairs with reset_and_seed.sql, which creates the five accounts and their
+tokens. The two lists must match -- token dd-test-03 is ministral-3:14b in both.
 The tokens are predictable by design so this script needs no configuration,
 which is exactly why the accounts must not exist on a public instance.
 
-Eleven genuinely different sets of weights, plus four quantization variants
-kept as comparisons. qwen2.5:0.5b runs three times -- at q2_K, the default
-q4_K_M and fp16 -- so where those three disagree, quantization is the only
-thing that differs. That is the site's claim about configuration, at the
-smallest scale it can be shown.
-
-**Expect dropped ballots.** The client accepts only a reply that parses as
-exactly two booleans, and a 135M model often cannot manage that. A dropped
-reply is the client refusing to guess, not a failure -- but it means this set
-tests the pipeline rather than the judgement. The summary counts drops per
-model, which at this size is the most interesting column.
+Five labs, one model each, all at the default 4-bit quantization and all under
+10 GB, so each loads whole into 12 GB of VRAM with room for the context. A
+model that spills into system RAM runs several times slower, which is the
+difference between an evening and a weekend for 1250 ballots.
 
 It works through one model at a time rather than one question at a time.
 Ollama keeps one model resident, so alternating would reload weights on every
@@ -36,26 +30,15 @@ import httpx
 
 import agent_client as ac
 
-# (token, model). Must match the list in reset_and_seed.sql. Every tag here was
+# (token, model). Must match the list in reset_and_seed.sql. Every tag was
 # checked against the Ollama library rather than recalled -- a mistyped tag
-# fails at `ollama pull`, the least useful moment to find out. llama3.2:1b is
-# deliberately absent: at 1.24B it is over the line however it is marketed.
+# fails at `ollama pull`, the least useful moment to find out.
 AGENTS = [
-    ("dd-test-01", "qwen3:0.6b"),                      # qwen3-06b
-    ("dd-test-02", "qwen3:0.6b-q8_0"),                 # qwen3-06b-q8
-    ("dd-test-03", "qwen2.5:0.5b"),                    # qwen25-05b
-    ("dd-test-04", "qwen2.5:0.5b-instruct-q2_K"),      # qwen25-05b-q2k
-    ("dd-test-05", "qwen2.5:0.5b-instruct-fp16"),      # qwen25-05b-fp16
-    ("dd-test-06", "qwen2:0.5b"),                      # qwen2-05b
-    ("dd-test-07", "qwen:0.5b-chat"),                  # qwen15-05b
-    ("dd-test-08", "gemma3:270m"),                     # gemma3-270m
-    ("dd-test-09", "gemma3:270m-it-q8_0"),             # gemma3-270m-q8
-    ("dd-test-10", "smollm2:360m"),                    # smollm2-360m
-    ("dd-test-11", "smollm2:135m"),                    # smollm2-135m
-    ("dd-test-12", "smollm:360m-instruct-v0.2-q8_0"),  # smollm-360m
-    ("dd-test-13", "smollm:135m-instruct-v0.2-q8_0"),  # smollm-135m
-    ("dd-test-14", "granite4:350m"),                   # granite4-350m
-    ("dd-test-15", "granite4:350m-h"),                 # granite4-350m-h
+    ("dd-test-01", "gemma4:12b"),        # Google,    7.6 GB
+    ("dd-test-02", "qwen3.5:9b"),        # Alibaba,   6.6 GB
+    ("dd-test-03", "ministral-3:14b"),   # Mistral,   9.1 GB
+    ("dd-test-04", "phi4:14b"),          # Microsoft, 9.1 GB
+    ("dd-test-05", "granite4.2:8b"),     # IBM,       5.3 GB
 ]
 
 QUADRANT = {(True, False): "supported", (True, True): "contested",
@@ -130,7 +113,7 @@ def main() -> None:
         pull_all()
 
     if args.forums:
-        # Check the names once, up front, rather than letting all fifteen
+        # Check the names once, up front, rather than letting all five
         # agents discover the same typo one after another.
         real = {f["slug"] for f in ac.list_forums()}
         wrong = [s for s in args.forums.split(",") if s.strip() and s.strip() not in real]
@@ -166,8 +149,7 @@ def main() -> None:
     print(f"\n{total} ballots cast, {drops} replies dropped as unparseable.")
     if drops:
         print("Dropped replies are models failing to produce two booleans. That "
-              "is the client refusing to guess, not an error -- and at this size "
-              "it is expected, sometimes for most of a model's attempts.")
+              "is the client refusing to guess, not an error.")
 
 
 if __name__ == "__main__":

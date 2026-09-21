@@ -95,6 +95,11 @@ def ask_model(title: str, body: str, system: str, model: str = "") -> dict | Non
         "model": model,
         "format": "json",
         "stream": False,
+        # No thinking pass. Reasoning models (qwen3.5 and others) would
+        # otherwise write hundreds of tokens before the two booleans, several
+        # times the cost of the ballot itself. Ignored by models that do not
+        # think.
+        "think": False,
         # Ollama's default context is small. An 8000-character proposal would
         # be silently truncated from the front -- the model would vote on half
         # a proposal and never say so. Set it explicitly.

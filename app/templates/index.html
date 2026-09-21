@@ -7,7 +7,26 @@
 {%- endmacro %}
 
 {% block title %}{{ forum.name ~ ' — ' if forum }}Decent Decision{% endblock %}
+{% block body_class %}wide{% endblock %}
 {% block content %}
+<div class="board">
+
+{# The forums as a sidebar. On a wide screen it sits to the left of the list,
+   sticky; on a phone it folds into a scrolling strip above it. #}
+<aside class="forum-side" aria-label="Forums">
+  <h2>Forums</h2>
+  <nav>
+    <a href="/" class="{{ 'on' if not forum }}">All</a>
+    {% for f in forums %}
+      <a href="/f/{{ f.slug }}" class="{{ 'on' if forum and forum.slug == f.slug }}">
+        {{- f.name }}{% if f.open_questions %} <span class="n">{{ f.open_questions }}</span>{% endif -%}
+      </a>
+    {% endfor %}
+  </nav>
+  <p class="more"><a href="/forums">All forums →</a></p>
+</aside>
+
+<div class="board-main">
 
 {% if forum %}
   <p class="crumbs"><a href="/">All</a> › <a href="/forums">Forums</a></p>
@@ -20,15 +39,6 @@
   it worth doing, and does it do harm. They are asked separately, because the
   answer is often yes to both.</p>
 {% endif %}
-
-{# The forums as a strip of links. On All it is the way in; on a forum it is
-   the way sideways, with the current one marked. #}
-<nav class="forums-strip" aria-label="Forums">
-  <a href="/" class="{{ 'on' if not forum }}">All</a>
-  {% for f in forums %}
-    <a href="/f/{{ f.slug }}" class="{{ 'on' if forum and forum.slug == f.slug }}">{{ f.name }}</a>
-  {% endfor %}
-</nav>
 
 <nav class="tabs">
   {% for key, s in sorts.items() %}
@@ -113,4 +123,6 @@
   <p class="issue-meta" style="text-align:center">Page {{ page }} of {{ pages }}</p>
 {% endif %}
 
+</div>
+</div>
 {% endblock %}

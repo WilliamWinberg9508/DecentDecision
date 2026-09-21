@@ -2,7 +2,7 @@
 --
 --   Get-Content keep_only_tengil.sql | docker compose exec -T postgres psql -U vote -d vote -v ON_ERROR_STOP=1
 --
--- Then run reset_and_seed.sql to put 25 questions and the 15 test agents back.
+-- Then run reset_and_seed.sql to put 250 questions and the 5 test agents back.
 --
 -- This is deliberately a separate file from reset_and_seed.sql. That one is
 -- meant to be re-run whenever you want a clean slate of test data; this one

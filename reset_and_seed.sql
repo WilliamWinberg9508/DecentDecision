@@ -1,6 +1,6 @@
 -- Wipe the questions, ballots and discussion, seed 250 fresh questions -- ten
--- in each of the 25 country forums -- and create fifteen test agents, one per
--- model, every one under a billion parameters. Pairs with vote_all.py, whose
+-- in each of the 25 country forums -- and create five test agents, one per
+-- model, every one small enough for a 12 GB RTX 3060. Pairs with vote_all.py, whose
 -- token list matches this one.
 --
 -- The questions contain non-ASCII text (Türkiye, São Paulo, ...), and
@@ -18,7 +18,7 @@
 -- questions. Real accounts, yours included, are untouched -- the questions are
 -- posted as the oldest real account, which is normally you. Forums are kept.
 --
--- WARNING: the test accounts have PREDICTABLE tokens (dd-test-01 ... dd-test-15)
+-- WARNING: the test accounts have PREDICTABLE tokens (dd-test-01 ... dd-test-05)
 -- so the voting script needs no configuration. Fine on localhost, unacceptable
 -- on a public instance. Delete them before you publish:
 --
@@ -63,58 +63,31 @@ TRUNCATE notifications, comment_votes, comments, votes, issues RESTART IDENTITY;
 -- agents left voting under a model they no longer run. Their agents cascade.
 DELETE FROM users WHERE email LIKE '%@dd.test';
 
--- --- fifteen test accounts, one model each ------------------------------------
--- Eleven genuinely different sets of weights, plus four quantization variants
--- chosen as comparisons: qwen2.5:0.5b appears three times, at q2_K, the
--- default q4_K_M and fp16 -- the same model squashed three ways. Where they
--- disagree, quantization is the only thing that differs.
+-- --- five test accounts, one model each ---------------------------------------
+-- The five strongest general models that fit whole in an RTX 3060's 12 GB,
+-- each from a different lab, so a disagreement is between different training
+-- rather than between sizes of one family. Every one is under 10 GB at the
+-- default 4-bit quantization, leaving room for the context.
+
+CREATE TEMP TABLE test_models (slug text, model text, token text) ON COMMIT DROP;
+INSERT INTO test_models VALUES
+    ('gemma4-12b',     'gemma4:12b',       'dd-test-01'),   -- Google
+    ('qwen35-9b',      'qwen3.5:9b',       'dd-test-02'),   -- Alibaba
+    ('ministral3-14b', 'ministral-3:14b',  'dd-test-03'),   -- Mistral
+    ('phi4-14b',       'phi4:14b',         'dd-test-04'),   -- Microsoft
+    ('granite42-8b',   'granite4.2:8b',    'dd-test-05');   -- IBM
 
 INSERT INTO users (email, email_canonical, display_name, username,
                    password_hash, status, email_verified, note)
-SELECT m.slug || '@dd.test', m.slug || '@dd.test', m.slug, m.slug,
+SELECT slug || '@dd.test', slug || '@dd.test', slug, slug,
        NULL,                    -- no password: these cannot be logged into
        'approved', true, 'local test agent'
-  FROM (VALUES
-    ('qwen3-06b',       'qwen3:0.6b',                      'dd-test-01'),
-    ('qwen3-06b-q8',    'qwen3:0.6b-q8_0',                 'dd-test-02'),
-    ('qwen25-05b',      'qwen2.5:0.5b',                    'dd-test-03'),
-    ('qwen25-05b-q2k',  'qwen2.5:0.5b-instruct-q2_K',      'dd-test-04'),
-    ('qwen25-05b-fp16', 'qwen2.5:0.5b-instruct-fp16',      'dd-test-05'),
-    ('qwen2-05b',       'qwen2:0.5b',                      'dd-test-06'),
-    ('qwen15-05b',      'qwen:0.5b-chat',                  'dd-test-07'),
-    ('gemma3-270m',     'gemma3:270m',                     'dd-test-08'),
-    ('gemma3-270m-q8',  'gemma3:270m-it-q8_0',             'dd-test-09'),
-    ('smollm2-360m',    'smollm2:360m',                    'dd-test-10'),
-    ('smollm2-135m',    'smollm2:135m',                    'dd-test-11'),
-    ('smollm-360m',     'smollm:360m-instruct-v0.2-q8_0',  'dd-test-12'),
-    ('smollm-135m',     'smollm:135m-instruct-v0.2-q8_0',  'dd-test-13'),
-    ('granite4-350m',   'granite4:350m',                   'dd-test-14'),
-    ('granite4-350m-h', 'granite4:350m-h',                 'dd-test-15')
-  ) AS m(slug, model, token);
+  FROM test_models;
 
 INSERT INTO agents (user_id, name, model_name, token_hash)
 SELECT u.id, u.username || '-agent', m.model,
        encode(sha256(m.token::bytea), 'hex')
-  FROM (VALUES
-    ('qwen3-06b',       'qwen3:0.6b',                      'dd-test-01'),
-    ('qwen3-06b-q8',    'qwen3:0.6b-q8_0',                 'dd-test-02'),
-    ('qwen25-05b',      'qwen2.5:0.5b',                    'dd-test-03'),
-    ('qwen25-05b-q2k',  'qwen2.5:0.5b-instruct-q2_K',      'dd-test-04'),
-    ('qwen25-05b-fp16', 'qwen2.5:0.5b-instruct-fp16',      'dd-test-05'),
-    ('qwen2-05b',       'qwen2:0.5b',                      'dd-test-06'),
-    ('qwen15-05b',      'qwen:0.5b-chat',                  'dd-test-07'),
-    ('gemma3-270m',     'gemma3:270m',                     'dd-test-08'),
-    ('gemma3-270m-q8',  'gemma3:270m-it-q8_0',             'dd-test-09'),
-    ('smollm2-360m',    'smollm2:360m',                    'dd-test-10'),
-    ('smollm2-135m',    'smollm2:135m',                    'dd-test-11'),
-    ('smollm-360m',     'smollm:360m-instruct-v0.2-q8_0',  'dd-test-12'),
-    ('smollm-135m',     'smollm:135m-instruct-v0.2-q8_0',  'dd-test-13'),
-    ('granite4-350m',   'granite4:350m',                   'dd-test-14'),
-    ('granite4-350m-h', 'granite4:350m-h',                 'dd-test-15')
-  ) AS m(slug, model, token)
-  JOIN users u ON u.username = m.slug;
-
--- --- 25 questions --------------------------------------------------------------
+  FROM test_models m JOIN users u ON u.username = m.slug;
 
 -- --- 250 questions, ten per country forum -------------------------------------
 -- Written to spread across all four outcomes: some clearly worth doing and
@@ -385,7 +358,7 @@ SELECT (SELECT id FROM users WHERE email NOT LIKE '%@dd.test'
 COMMIT;
 
 -- What you should see: 250 questions, 25 forums with 10 each, 0 ballots,
--- 15 test agents, and 0 titles that are not questions.
+-- 5 test agents, and 0 titles that are not questions.
 SELECT (SELECT count(*) FROM issues) AS questions,
        (SELECT count(DISTINCT forum_id) FROM issues) AS forums_used,
        (SELECT count(*) FROM issues WHERE forum_id IS NULL) AS without_forum,

@@ -119,7 +119,7 @@ under the 2×2 and above the by-model table.
 ## Re-seeding the test questions
 
 `reset_and_seed.sql` wipes the questions, ballots and discussion and puts in 250
-questions, ten per country forum, plus the fifteen test agents. Run it after the
+questions, ten per country forum, plus the five test agents. Run it after the
 app has started at least once, because the app is what creates the forums.
 
 The questions contain letters like the ü in Türkiye, and Windows PowerShell 5
@@ -132,9 +132,10 @@ docker compose exec postgres psql -U vote -d vote -v ON_ERROR_STOP=1 -f /tmp/res
 ```
 
 The last thing it prints should read 250 questions, 25 forums used, 0 without a
-forum, 15 test agents. Then vote, all at once or a forum at a time:
+forum, 5 test agents. Then vote, all at once or a forum at a time:
 
 ```powershell
+python vote_all.py --pull            # first time only: the five models, about 38 GB
 python vote_all.py --list-forums
 python vote_all.py --forums japan,brazil
 ```
