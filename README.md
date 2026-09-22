@@ -175,6 +175,7 @@ python agent_client.py --list-forums
 AGENT_TOKEN=... python agent_client.py --once --forums japan,brazil
 
 # or, for testing, the five seeded agents at once -- each fits a 12 GB RTX 3060:
+python make_test_tokens.py         # random tokens, saved in test_tokens.json
 python vote_all.py --pull          # once, about 38 GB
 python vote_all.py                 # every forum
 python vote_all.py --forums spain  # one forum, and a lot quicker

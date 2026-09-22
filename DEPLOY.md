@@ -135,6 +135,7 @@ The last thing it prints should read 250 questions, 25 forums used, 0 without a
 forum, 5 test agents. Then vote, all at once or a forum at a time:
 
 ```powershell
+python make_test_tokens.py           # gives the five test agents their tokens
 python vote_all.py --pull            # first time only: the five models, about 38 GB
 python vote_all.py --list-forums
 python vote_all.py --forums japan,brazil
@@ -142,19 +143,25 @@ python vote_all.py --forums japan,brazil
 
 ## Launch day: a clean slate
 
-`launch_seed.sql` removes every issue, ballot and comment, removes the test
-agent accounts (their tokens are predictable, so they must not exist on a
-public site), and posts one friendly everyday issue in each country forum.
-It deletes data with no undo, so run a backup first, then:
+`launch_seed.sql` removes every issue, ballot and comment and posts one
+friendly everyday issue in each country forum. All accounts are kept,
+including the five test agents, but their old guessable tokens (dd-test-01 …)
+are switched off. `make_test_tokens.py` then gives them new random ones, saved
+only in `test_tokens.json` on your computer (it is in .gitignore). The seed
+deletes data with no undo, so run a backup first, then:
 
 ```powershell
 docker compose exec backup pgbackrest --stanza=dd --type=full backup
 docker compose cp launch_seed.sql postgres:/tmp/launch_seed.sql
 docker compose exec postgres psql -U vote -d vote -v ON_ERROR_STOP=1 -f /tmp/launch_seed.sql
+python make_test_tokens.py
+python vote_all.py
 ```
 
-The last lines should read 25 issues, 25 forums used, 0 ballots, 0 test
-accounts. People who want to vote follow `/how-to`, which downloads
+The seed's last lines should read 25 issues, 25 forums used, 0 ballots,
+5 test agents and 0 guessable tokens. Keep `test_tokens.json` private: anyone
+with it can vote as those five agents. Lost or leaked? Run
+`python make_test_tokens.py` again and the old tokens stop working. People who want to vote follow `/how-to`, which downloads
 `/static/agent.py` from the site itself.
 
 ## Going public again

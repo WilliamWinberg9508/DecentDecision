@@ -13,5 +13,8 @@ venv/
 # Local scratch
 *.log
 _to_delete/
-# superseded files kept around by hand
+# superseded files kept around by hand (gitignore has no inline comments)
 _to_delete_*
+
+# Test-agent tokens made by make_test_tokens.py: real credentials, local only
+test_tokens.json

@@ -18,11 +18,11 @@
 -- questions. Real accounts, yours included, are untouched -- the questions are
 -- posted as the oldest real account, which is normally you. Forums are kept.
 --
--- WARNING: the test accounts have PREDICTABLE tokens (dd-test-01 ... dd-test-05)
--- so the voting script needs no configuration. Fine on localhost, unacceptable
--- on a public instance. Delete them before you publish:
+-- The test accounts are created with no working token. Give them fresh,
+-- random ones -- kept only in test_tokens.json on your computer, never in
+-- this file or in git -- by running afterwards:
 --
---   DELETE FROM users WHERE email LIKE '%@dd.test';
+--   python make_test_tokens.py
 
 SET client_encoding TO 'UTF8';
 
@@ -69,13 +69,13 @@ DELETE FROM users WHERE email LIKE '%@dd.test';
 -- rather than between sizes of one family. Every one is under 10 GB at the
 -- default 4-bit quantization, leaving room for the context.
 
-CREATE TEMP TABLE test_models (slug text, model text, token text) ON COMMIT DROP;
+CREATE TEMP TABLE test_models (slug text, model text) ON COMMIT DROP;
 INSERT INTO test_models VALUES
-    ('gemma4-12b',     'gemma4:12b',       'dd-test-01'),   -- Google
-    ('qwen35-9b',      'qwen3.5:9b',       'dd-test-02'),   -- Alibaba
-    ('ministral3-14b', 'ministral-3:14b',  'dd-test-03'),   -- Mistral
-    ('phi4-14b',       'phi4:14b',         'dd-test-04'),   -- Microsoft
-    ('granite42-8b',   'granite4.2:8b',    'dd-test-05');   -- IBM
+    ('gemma4-12b',     'gemma4:12b'),   -- Google
+    ('qwen35-9b',      'qwen3.5:9b'),   -- Alibaba
+    ('ministral3-14b', 'ministral-3:14b'),   -- Mistral
+    ('phi4-14b',       'phi4:14b'),   -- Microsoft
+    ('granite42-8b',   'granite4.2:8b');   -- IBM
 
 INSERT INTO users (email, email_canonical, display_name, username,
                    password_hash, status, email_verified, note)
@@ -86,7 +86,9 @@ SELECT slug || '@dd.test', slug || '@dd.test', slug, slug,
 
 INSERT INTO agents (user_id, name, model_name, token_hash)
 SELECT u.id, u.username || '-agent', m.model,
-       encode(sha256(m.token::bytea), 'hex')
+       -- a hash no token produces: the agent exists but cannot vote until
+       -- make_test_tokens.py gives it a real token
+       'revoked:' || md5(random()::text || clock_timestamp()::text)
   FROM test_models m JOIN users u ON u.username = m.slug;
 
 -- --- 250 questions, ten per country forum -------------------------------------

@@ -6,10 +6,9 @@
     python vote_all.py --forums japan   # only some forums
     python vote_all.py --limit 5        # only the first 5 questions each
 
-Pairs with reset_and_seed.sql, which creates the five accounts and their
-tokens. The two lists must match -- token dd-test-03 is ministral-3:14b in both.
-The tokens are predictable by design so this script needs no configuration,
-which is exactly why the accounts must not exist on a public instance.
+Pairs with reset_and_seed.sql, which creates the five accounts, and
+make_test_tokens.py, which gives them random tokens and saves them in
+test_tokens.json next to this script. The account names must match.
 
 Five labs, one model each, all at the default 4-bit quantization and all under
 10 GB, so each loads whole into 12 GB of VRAM with room for the context. A
@@ -22,6 +21,8 @@ ballot; model-major order loads each set once.
 """
 
 import argparse
+import json
+import pathlib
 import subprocess
 import sys
 import time
@@ -30,16 +31,24 @@ import httpx
 
 import agent_client as ac
 
-# (token, model). Must match the list in reset_and_seed.sql. Every tag was
-# checked against the Ollama library rather than recalled -- a mistyped tag
-# fails at `ollama pull`, the least useful moment to find out.
+# (account, model). Must match the list in reset_and_seed.sql. The tokens are
+# not here: make_test_tokens.py generates random ones and keeps them in
+# test_tokens.json, which is on your computer only (it is in .gitignore).
 AGENTS = [
-    ("dd-test-01", "gemma4:12b"),        # Google,    7.6 GB
-    ("dd-test-02", "qwen3.5:9b"),        # Alibaba,   6.6 GB
-    ("dd-test-03", "ministral-3:14b"),   # Mistral,   9.1 GB
-    ("dd-test-04", "phi4:14b"),          # Microsoft, 9.1 GB
-    ("dd-test-05", "granite4.2:8b"),     # IBM,       5.3 GB
+    ("gemma4-12b",     "gemma4:12b"),        # Google,    7.6 GB
+    ("qwen35-9b",      "qwen3.5:9b"),        # Alibaba,   6.6 GB
+    ("ministral3-14b", "ministral-3:14b"),   # Mistral,   9.1 GB
+    ("phi4-14b",       "phi4:14b"),          # Microsoft, 9.1 GB
+    ("granite42-8b",   "granite4.2:8b"),     # IBM,       5.3 GB
 ]
+TOKENS_FILE = pathlib.Path(__file__).with_name("test_tokens.json")
+
+
+def load_tokens() -> dict:
+    try:
+        return json.loads(TOKENS_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        sys.exit("No test_tokens.json yet. Run: python make_test_tokens.py")
 
 QUADRANT = {(True, False): "supported", (True, True): "contested",
             (False, True): "opposed", (False, False): "irrelevant"}
@@ -145,8 +154,12 @@ def main() -> None:
     print(f"forums: {args.forums or 'all'}")
     print(f"prompt: {'v' + str(version) if version else 'local'}\n")
 
+    tokens = load_tokens()
     results = []
-    for token, model in AGENTS:
+    for account, model in AGENTS:
+        token = tokens.get(account)
+        if not token:
+            sys.exit(f"No token for {account}. Run: python make_test_tokens.py")
         print(f"  {model}", flush=True)
         results.append(run_agent(token, model, system, version, args.limit, args.forums))
 

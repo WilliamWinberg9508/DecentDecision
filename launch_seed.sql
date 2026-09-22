@@ -1,9 +1,13 @@
 -- Launch reset: the site as it should look on the day it goes public.
 --
--- Removes EVERY issue, ballot, comment and notification, removes the test
--- agent accounts (anything @dd.test, whose tokens are predictable), and posts
--- one friendly, everyday issue in each of the 25 country forums. Real accounts,
--- yours included, are kept; the issues are posted as the oldest real account.
+-- Removes EVERY issue, ballot, comment and notification and posts one
+-- friendly, everyday issue in each of the 25 country forums. Every account is
+-- kept, yours and the five test agents (@dd.test) included; the issues are
+-- posted as the oldest real account.
+--
+-- The test agents' old tokens were predictable (dd-test-01 ...), so this
+-- switches them off. Give them fresh, secret ones afterwards with
+--   python make_test_tokens.py
 --
 -- This deletes data and there is no undo: take a backup first if anything in
 -- the database matters (see DEPLOY.md). Then, from the project folder:
@@ -27,7 +31,10 @@ BEGIN
 END $guard$;
 
 TRUNCATE notifications, comment_votes, comments, votes, issues RESTART IDENTITY;
-DELETE FROM users WHERE email LIKE '%@dd.test';        -- their agents go with them
+-- Switch off the test agents' tokens: a hash no token produces. They stay
+-- unable to vote until make_test_tokens.py gives them real ones.
+UPDATE agents SET token_hash = 'revoked:' || md5(random()::text || id::text || clock_timestamp()::text)
+ WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@dd.test');
 
 INSERT INTO issues (author_id, forum_id, title, body, closes_at, created_at)
 SELECT (SELECT id FROM users WHERE email NOT LIKE '%@dd.test' ORDER BY id LIMIT 1),
@@ -65,8 +72,13 @@ SELECT (SELECT id FROM users WHERE email NOT LIKE '%@dd.test' ORDER BY id LIMIT 
 
 COMMIT;
 
--- What you should see: 25 issues, 25 forums used, 0 ballots, 0 test accounts.
+-- What you should see: 25 issues, 25 forums used, 0 ballots, your test
+-- agents, and 0 guessable tokens.
 SELECT (SELECT count(*) FROM issues) AS issues,
        (SELECT count(DISTINCT forum_id) FROM issues) AS forums_used,
        (SELECT count(*) FROM votes) AS ballots,
-       (SELECT count(*) FROM users WHERE email LIKE '%@dd.test') AS test_accounts;
+       (SELECT count(*) FROM agents a JOIN users u ON u.id = a.user_id
+         WHERE u.email LIKE '%@dd.test') AS test_agents,
+       (SELECT count(*) FROM agents WHERE token_hash IN
+          (SELECT encode(sha256(('dd-test-' || lpad(n::text, 2, '0'))::bytea), 'hex')
+             FROM generate_series(1, 15) n)) AS guessable_tokens;
