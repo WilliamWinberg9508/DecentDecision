@@ -327,8 +327,8 @@ async def test_the_discuss_button_sits_between_the_tally_and_the_motivations(
 
     quad = page.index('class="quad"')
     button = page.index('href="#discuss"')
-    by_model = page.index("<h2 style=\"margin-top:44px\">By model</h2>") \
-        if "By model" in page else page.index("No ballots yet")
+    by_model = page.index("By model</h2>") if "By model</h2>" in page \
+        else page.index('id="discuss"')
 
     assert quad < button < by_model
 
@@ -379,3 +379,24 @@ async def test_the_sort_tabs_keep_the_window_open(client, browser):
 
     assert f'/i/{iid}?comments=new#discuss' in page
     assert "#discussion" not in page, "a stale anchor from the old page layout"
+
+
+async def test_replying_and_editing_happen_inside_the_window(client, browser):
+    """The reply and edit boxes are in the overlay itself, so answering someone
+    never leaves the discussion -- and posting lands back in it."""
+    iid, _ = await scene(client, browser)
+    await say(client, iid, "the first word")
+    cid = (await dd.q("SELECT id FROM comments ORDER BY id DESC LIMIT 1", one=True))["id"]
+    page = (await client.get(f"/i/{iid}")).text
+    window = page[page.index('id="discuss"'):]
+
+    assert f'name="parent_id" value="{cid}"' in window       # the reply box
+    assert f'action="/c/{cid}/edit"' in window              # the edit box, own comment
+    assert f'href="/c/{cid}/reply' not in page              # no second page
+
+    r = await client.post(f"/i/{iid}/comment", data={
+        "body": "a reply", "parent_id": cid, "csrf": await csrf(client, f"/i/{iid}")})
+    assert r.status_code == 303 and "#c" in r.headers["location"]
+    r = await client.post(f"/i/{iid}/comment", data={
+        "body": "   ", "csrf": await csrf(client, f"/i/{iid}")})
+    assert r.headers["location"].endswith("#discuss")        # still in the window

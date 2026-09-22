@@ -1453,7 +1453,9 @@ async def comment_target(request: Request, comment_id: int,
 
 
 def back_to(issue_id: int, comment_id: int | None = None, sort: str = "best"):
-    anchor = f"#c{comment_id}" if comment_id else ""
+    # Always back into the discussion window: onto the comment when there is
+    # one (the window opens on it through :has(:target)), else the window.
+    anchor = f"#c{comment_id}" if comment_id else "#discuss"
     return RedirectResponse(f"/i/{issue_id}?comments={sort}{anchor}",
                             status_code=303)
 

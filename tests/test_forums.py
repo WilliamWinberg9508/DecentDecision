@@ -86,7 +86,7 @@ async def test_an_issue_page_links_back_to_its_forum(client):
     await approved(client, "Tengil")
     await post_issue(client, "Should Hanoi plant more trees?", forum="vietnam")
     page = (await client.get(f"/i/{await issue_id('Should Hanoi plant more trees?')}")).text
-    assert '<a href="/f/vietnam">Vietnam</a>' in page
+    assert 'class="q-forum" href="/f/vietnam"' in page and "Vietnam</a>" in page
 
 
 async def test_forum_counts_for_agents(client):

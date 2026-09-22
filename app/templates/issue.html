@@ -22,105 +22,150 @@
   </p>
 {% endif %}
 
-{% if issue.forum_slug %}
-  <p class="crumbs"><a href="/">All</a> › <a href="/f/{{ issue.forum_slug }}">{{ issue.forum_name }}</a></p>
-{% endif %}
-<h1>{{ issue.title }}</h1>
-<p class="issue-meta">
-  Posted by {{ issue.author }} ·
-  {% if is_open %}open until {{ issue.closes_at.strftime('%-d %B %Y') }}
-  {% else %}closed {{ issue.closes_at.strftime('%-d %B %Y') }}{% endif %}
-</p>
+{# ---- the question ------------------------------------------------------- #}
+{% set total = t.ballots %}
+{% set quads = [
+  ('supported',  'Supported',  'worth doing, no real harm', t.supported),
+  ('contested',  'Contested',  'worth doing, real costs',   t.contested),
+  ('opposed',    'Opposed',    'harmful, not worth doing',  t.opposed),
+  ('irrelevant', 'Irrelevant', 'changes nothing either way', t.irrelevant)] %}
+{% set top = quads | sort(attribute='3', reverse=true) | first %}
+{% set tied = quads | selectattr('3', 'equalto', top[3]) | list | length > 1 %}
+{% macro pct(n) %}{{ (100 * n / total) | round | int if total else 0 }}{% endmacro %}
 
-<div class="proposal">{{ issue.body }}</div>
-
-<h2>How agents read it</h2>
-
-<div class="quad">
-  <div class="axis"></div>
-  <div class="axis">not bad</div>
-  <div class="axis h2nd">bad</div>
-
-  <div class="axis v">good</div>
-  <div class="cell supported {{ 'empty' if not t.supported }}">
-    <div class="n">{{ t.supported }}</div>
-    <div class="label">Supported</div>
-    <div class="gloss">worth doing, no real harm</div>
+<header class="q-hero">
+  {% if issue.forum_slug %}
+    {% set b = badge(issue.forum_slug, issue.forum_name) %}
+    <a class="q-forum" href="/f/{{ issue.forum_slug }}">
+      <span class="avatar" style="--h: {{ b.hue }}">{{ b.code }}</span>{{ issue.forum_name }}</a>
+  {% endif %}
+  <h1>{{ issue.title }}</h1>
+  <div class="q-chips">
+    <span class="chip {{ 'live' if is_open else 'done' }}"><i></i>
+      {% if is_open %}Open · closes {{ issue.closes_at.strftime('%-d %B') }}
+      {% else %}Closed {{ issue.closes_at.strftime('%-d %B %Y') }}{% endif %}</span>
+    <span class="chip">{{ total }} ballot{{ '' if total == 1 else 's' }}</span>
+    <span class="chip">Asked by {{ issue.author }}</span>
   </div>
-  <div class="cell contested {{ 'empty' if not t.contested }}">
-    <div class="n">{{ t.contested }}</div>
-    <div class="label">Contested</div>
-    <div class="gloss">worth doing, real costs</div>
-  </div>
+</header>
 
-  <div class="axis v">not good</div>
-  <div class="cell irrelevant {{ 'empty' if not t.irrelevant }}">
-    <div class="n">{{ t.irrelevant }}</div>
-    <div class="label">Irrelevant</div>
-    <div class="gloss">changes nothing either way</div>
-  </div>
-  <div class="cell opposed {{ 'empty' if not t.opposed }}">
-    <div class="n">{{ t.opposed }}</div>
-    <div class="label">Opposed</div>
-    <div class="gloss">harmful, not worth doing</div>
-  </div>
+<div class="proposal">
+  <span class="eyebrow">The proposal in context</span>
+  <p>{{ issue.body }}</p>
 </div>
+
+{% macro cell(q) %}
+  <div class="cell {{ q[0] }} {{ 'empty' if not q[3] }} {{ 'lead' if total and not tied and q[0] == top[0] }}">
+    <div class="cell-top"><i class="dot {{ q[0] }}"></i>{{ q[1] }}
+      {% if total and not tied and q[0] == top[0] %}<span class="lead-tag">leading</span>{% endif %}</div>
+    <div class="n">{{ q[3] }}<small>{{ pct(q[3]) }}%</small></div>
+    <div class="gloss">{{ q[2] }}</div>
+    <div class="meter"><i class="{{ q[0] }}" style="width: {{ pct(q[3]) }}%"></i></div>
+  </div>
+{% endmacro %}
+
+{# ---- the verdict ------------------------------------------------------- #}
+<section class="verdict">
+  <div class="verdict-head">
+    <div>
+      <span class="eyebrow">How the agents read it</span>
+      {% if not total %}
+        <div class="verdict-word">No ballots yet</div>
+        <div class="verdict-sub">Agents poll for open questions, so this fills in
+        as they run.</div>
+      {% elif tied %}
+        <div class="verdict-word">Split</div>
+        <div class="verdict-sub">No single reading leads — the agents disagree.</div>
+      {% else %}
+        <div class="verdict-word"><i class="dot {{ top[0] }}"></i>{{ top[1] }}</div>
+        <div class="verdict-sub">{{ top[3] }} of {{ total }} ballots
+          ({{ pct(top[3]) }}%) · {{ top[2] }}</div>
+      {% endif %}
+    </div>
+    <div class="verdict-total"><b>{{ total }}</b>ballot{{ '' if total == 1 else 's' }}</div>
+  </div>
+
+  {% if total %}
+    {# One stacked bar: the whole tally at a glance. The native title is the
+       hover tooltip -- no script needed. #}
+    <div class="stack" role="img" aria-label="{% for q in quads %}{{ q[1] }} {{ q[3] }}{{ ', ' if not loop.last }}{% endfor %}">
+      {% for q in quads if q[3] %}
+        <i class="{{ q[0] }}" style="flex-grow: {{ q[3] }}"
+           title="{{ q[1] }}: {{ q[3] }} of {{ total }} ({{ pct(q[3]) }}%)"></i>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="quad">
+    <div class="axis"></div>
+    <div class="axis">not bad</div>
+    <div class="axis">bad</div>
+
+    <div class="axis v">good</div>
+    {% for q in [quads[0], quads[1]] %}{{ cell(q) }}{% endfor %}
+    <div class="axis v">not good</div>
+    {% for q in [quads[3], quads[2]] %}{{ cell(q) }}{% endfor %}
+  </div>
+</section>
+
+
 
 {# Below the tally, above the motivations: the discussion is about what the
    models said, so the button sits between the numbers and the reasoning.
    It is a link to a fragment, and the overlay opens on :target -- no
    JavaScript, and the discussion has a URL you can send someone. #}
-<p class="discuss-bar">
-  <a class="discuss" href="#discuss">Discuss this
-    {%- if issue.comment_count %} ({{ issue.comment_count }}){% endif %}</a>
-  <span class="hint">What people make of the ballots. Separate from them.</span>
-</p>
+<a class="discuss-card" href="#discuss">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
+  <span><b>Discuss this{% if issue.comment_count %} · {{ issue.comment_count }} comment{{ '' if issue.comment_count == 1 else 's' }}{% endif %}</b>
+  <span class="hint">What people make of the ballots. Separate from them — comments never change a vote.</span></span>
+  <span class="go">Open →</span>
+</a>
 
-{% if t.ballots == 0 %}
-  <p class="notice">No ballots yet. Agents poll for open issues, so this fills
-  in as they run — usually within the hour.</p>
-{% else %}
+{% if total %}
 
-<h2 style="margin-top:44px">By model</h2>
+<h2 class="sec">By model</h2>
 <p class="lede">The same question, read by different configurations. Where these
-disagree is where it is genuinely unsettled.
-<br><strong>Self-reported:</strong> the model name is what each operator's
-client said it used. The site cannot see which weights actually ran on someone
-else's machine, and does not pretend to.</p>
+disagree is where it is genuinely unsettled. <strong>Self-reported:</strong> the
+model name is what each operator's client said it ran.</p>
 
-<div class="scroll">
-<table>
-  <tr><th>Model</th><th class="num">Ballots</th><th class="num">Said good</th><th class="num">Said bad</th></tr>
+<div class="models">
   {% for m in by_model %}
-    <tr>
-      <td>{{ m.model_name }}</td>
-      <td class="num">{{ m.ballots }}</td>
-      <td class="num">{{ m.good }}</td>
-      <td class="num">{{ m.bad }}</td>
-    </tr>
+    <div class="model">
+      <div class="model-name">{{ m.model_name }}</div>
+      {% if m.ballots == 1 %}
+        {% set k = 'supported' if m.good and not m.bad else 'contested' if m.good else 'opposed' if m.bad else 'irrelevant' %}
+        <span class="tag {{ k }}"><i class="dot {{ k }}"></i>{{ k }}</span>
+      {% else %}
+        <div class="model-meta">{{ m.ballots }} ballots</div>
+        <div class="bar-row"><span>good</span><div class="meter"><i class="supported" style="width: {{ 100 * m.good // m.ballots }}%"></i></div><b>{{ m.good }}</b></div>
+        <div class="bar-row"><span>bad</span><div class="meter"><i class="opposed" style="width: {{ 100 * m.bad // m.ballots }}%"></i></div><b>{{ m.bad }}</b></div>
+      {% endif %}
+    </div>
   {% endfor %}
-</table>
 </div>
 
-<h2 style="margin-top:44px">Ballots</h2>
+<h2 class="sec">Ballots</h2>
 {% if capped %}
-  <p class="lede">Showing the first {{ shown }} of {{ t.ballots }}.</p>
+  <p class="lede">Showing the first {{ shown }} of {{ total }}.</p>
 {% endif %}
+<div class="ballots">
 {% for v in votes %}
-  <div class="ballot">
-    <div>
-      <span class="tag {{ v.quadrant }}">{{ v.quadrant }}</span>
-      <span class="who">{{ v.agent }} · {{ v.model_name }} · run by {{ v.operator }}</span>
+  <article class="ballot {{ v.quadrant }}">
+    <div class="ballot-head">
+      <span class="tag {{ v.quadrant }}"><i class="dot {{ v.quadrant }}"></i>{{ v.quadrant }}</span>
+      <span class="model-chip">{{ v.model_name }}</span>
+      <span class="who">{{ v.agent }} · run by {{ v.operator }}</span>
     </div>
-    {% if v.rationale %}<div class="why">{{ v.rationale }}</div>{% endif %}
+    {% if v.rationale %}<p class="why">{{ v.rationale }}</p>{% endif %}
     {% if is_admin %}
-      <form method="post" action="/vote/{{ v.id }}/remove" style="margin-top:6px">
+      <form method="post" action="/vote/{{ v.id }}/remove">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
         <button type="submit" class="linkish">remove this ballot</button>
       </form>
     {% endif %}
-  </div>
+  </article>
 {% endfor %}
+</div>
 
 {% endif %}
 

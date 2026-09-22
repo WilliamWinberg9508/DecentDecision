@@ -9,9 +9,13 @@
   --line:    #e2ded4;
   --accent:  #2f5d50;
 
-  --supported:  #3c7a5e;
-  --contested:  #b07d2b;
-  --opposed:    #a4483f;
+  /* The four readings. Checked with the dataviz palette validator: lightness
+     band, chroma floor, colour-blind separation and contrast all pass for the
+     three hues; irrelevant is a deliberate neutral grey -- the "neither" of
+     the 2x2 -- and is always labelled, never told apart by colour alone. */
+  --supported:  #1f7f57;
+  --contested:  #c98a12;
+  --opposed:    #c43d3d;
   --irrelevant: #8a8880;
 
   --wash-supported:  #eef5f1;
@@ -29,9 +33,9 @@
     --line:    #2f3238;
     --accent:  #7fb3a1;
 
-    --supported:  #74b391;
-    --contested:  #d6ab5e;
-    --opposed:    #d2837a;
+    --supported:  #2e9e6d;
+    --contested:  #c38814;
+    --opposed:    #d63f4c;
     --irrelevant: #8f8d86;
 
     --wash-supported:  #1c2a24;
@@ -121,48 +125,6 @@ main { padding-block: 34px 60px; }
 .spark .o { background: var(--opposed); }
 .spark .n { background: var(--irrelevant); }
 
-/* --- the quadrant --- */
-
-.quad {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr;
-  grid-template-rows: auto auto auto;
-  gap: 2px;
-  margin: 24px 0 8px;
-}
-.quad .axis {
-  display: flex; align-items: center; justify-content: center;
-  color: var(--muted); font-size: 12px; letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.quad .axis.v { writing-mode: vertical-rl; transform: rotate(180deg); padding-right: 6px; }
-.quad .cell {
-  background: var(--card); border: 1px solid var(--line); border-radius: 6px;
-  padding: 18px 16px; min-height: 104px;
-}
-.quad .cell .n { font-family: Georgia, serif; font-size: 34px; line-height: 1; }
-.quad .cell .label { font-size: 13px; font-weight: 600; margin-top: 8px; }
-.quad .cell .gloss { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-.cell.supported  { background: var(--wash-supported);  border-color: var(--supported); }
-.cell.supported .n, .cell.supported .label   { color: var(--supported); }
-.cell.contested  { background: var(--wash-contested);  border-color: var(--contested); }
-.cell.contested .n, .cell.contested .label   { color: var(--contested); }
-.cell.opposed    { background: var(--wash-opposed);    border-color: var(--opposed); }
-.cell.opposed .n, .cell.opposed .label       { color: var(--opposed); }
-.cell.irrelevant { background: var(--wash-irrelevant); border-color: var(--line); }
-.cell.irrelevant .n, .cell.irrelevant .label { color: var(--irrelevant); }
-
-.cell.empty { opacity: 0.45; }
-
-/* --- proposal body --- */
-
-.proposal {
-  background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent);
-  border-radius: 6px; padding: 18px 20px; margin: 18px 0 30px;
-  white-space: pre-wrap; overflow-wrap: anywhere;
-}
-
 /* --- tables --- */
 
 .scroll { overflow-x: auto; }
@@ -173,20 +135,6 @@ td.num, th.num { text-align: right; padding-right: 18px; font-variant-numeric: t
 /* Flush right only when it really is the last column, or a number runs into
    whatever follows it. */
 td.num:last-child, th.num:last-child { padding-right: 0; }
-
-/* --- ballots --- */
-
-.ballot { padding: 14px 0; border-bottom: 1px solid var(--line); }
-.ballot .who { font-size: 13px; color: var(--muted); }
-.ballot .why { margin-top: 5px; }
-.tag {
-  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
-  text-transform: uppercase; padding: 2px 7px; border-radius: 3px; margin-right: 8px;
-}
-.tag.supported  { background: var(--wash-supported);  color: var(--supported); }
-.tag.contested  { background: var(--wash-contested);  color: var(--contested); }
-.tag.opposed    { background: var(--wash-opposed);    color: var(--opposed); }
-.tag.irrelevant { background: var(--wash-irrelevant); color: var(--irrelevant); }
 
 /* --- forms --- */
 
@@ -289,15 +237,6 @@ footer.site {
 }
 footer.site .wrap { padding-block: 22px 34px; }
 footer.site p { max-width: 62ch; }
-
-/* On a phone the 2x2 stops being readable as a grid, so it becomes a plain
-   stack. The colour and the label still carry the meaning. */
-@media (max-width: 560px) {
-  .quad { display: flex; flex-direction: column; gap: 8px; }
-  .quad .axis { display: none; }
-  .quad .cell { min-height: 0; padding: 14px 16px; }
-  .quad .cell .n { font-size: 27px; }
-}
 
 /* --- discussion ----------------------------------------------------------
    Comments are people talking to each other; ballots above are what the
@@ -591,3 +530,198 @@ body.wide main.wrap { max-width: 1140px; }
 .rail-name { display: block; font-size: 14px; }
 .rail-meta { display: block; font-size: 12px; color: var(--muted); }
 .rail-card .side-more { margin-left: 8px; }
+
+/* --- the question page ------------------------------------------------------ */
+
+.eyebrow {
+  display: block; font-size: 11px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+}
+h2.sec { margin: 48px 0 16px; font-size: 22px; }
+h2.sec + .lede { margin-top: 0; }
+
+.q-hero { padding-top: 14px; }
+.q-hero h1 { font-size: clamp(26px, 3.4vw, 36px); margin: 10px 0 14px; letter-spacing: -0.01em; }
+.q-forum {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  color: var(--ink); text-decoration: none; padding: 4px 12px 4px 4px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+}
+.q-forum:hover { border-color: var(--accent); }
+.q-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted);
+  padding: 4px 11px; border-radius: 999px; background: var(--hover);
+}
+.chip i { display: none; }
+.chip.live i, .chip.done i { display: block; width: 7px; height: 7px; border-radius: 50%; }
+.chip.live { color: var(--ink); }
+.chip.live i { background: var(--supported); box-shadow: 0 0 0 3px color-mix(in srgb, var(--supported) 22%, transparent); }
+.chip.done i { background: var(--irrelevant); }
+
+.proposal {
+  margin: 26px 0 0; padding: 20px 24px; border-radius: 14px;
+  background: var(--card); border: 1px solid var(--line);
+  font-size: 17px; line-height: 1.65;
+}
+.proposal p { margin: 0; white-space: pre-wrap; }
+
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.dot.supported  { background: var(--supported); }
+.dot.contested  { background: var(--contested); }
+.dot.opposed    { background: var(--opposed); }
+.dot.irrelevant { background: var(--irrelevant); }
+
+/* The verdict card: headline, one stacked bar, then the 2x2. */
+.verdict {
+  margin-top: 28px; padding: 24px; border-radius: 18px;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 8px 28px rgb(0 0 0 / .05);
+}
+.verdict-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.verdict-word {
+  display: flex; align-items: center; gap: 12px;
+  font-family: Georgia, serif; font-size: 34px; font-weight: 600; line-height: 1.1;
+}
+.verdict-word .dot { width: 16px; height: 16px; }
+.verdict-sub { color: var(--muted); font-size: 14px; margin-top: 6px; }
+.verdict-total { text-align: right; color: var(--muted); font-size: 13px; line-height: 1.1; }
+.verdict-total b {
+  display: block; font-family: Georgia, serif; font-size: 34px; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.stack { display: flex; gap: 2px; height: 14px; margin: 22px 0 6px; }
+.stack i { display: block; min-width: 6px; }
+.stack i:first-child { border-radius: 4px 0 0 4px; }
+.stack i:last-child  { border-radius: 0 4px 4px 0; }
+.stack i:only-child  { border-radius: 4px; }
+.stack .supported  { background: var(--supported); }
+.stack .contested  { background: var(--contested); }
+.stack .opposed    { background: var(--opposed); }
+.stack .irrelevant { background: var(--irrelevant); }
+
+.quad {
+  display: grid; grid-template-columns: 26px 1fr 1fr; gap: 10px; margin-top: 18px;
+}
+.quad .axis {
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  text-align: center; align-self: end;
+}
+.quad .axis.v { writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; }
+.quad .cell {
+  position: relative; padding: 16px 18px 18px; border-radius: 14px;
+  border: 1px solid var(--line); overflow: hidden;
+  background: color-mix(in srgb, var(--c) 7%, var(--card));
+}
+.quad .cell::before {                      /* the colour stripe along the top */
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--c);
+}
+.cell.supported  { --c: var(--supported); }
+.cell.contested  { --c: var(--contested); }
+.cell.opposed    { --c: var(--opposed); }
+.cell.irrelevant { --c: var(--irrelevant); }
+.cell.lead { border-color: var(--c); box-shadow: 0 0 0 1px var(--c) inset; }
+.cell.empty { background: var(--card); }
+.cell.empty::before { opacity: .35; }
+.cell.empty .n, .cell.empty .cell-top { color: var(--muted); }
+.cell-top { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.lead-tag {
+  margin-left: auto; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: 999px; background: var(--c); color: #fff;
+}
+@media (prefers-color-scheme: dark) { .lead-tag { color: #16171a; } }
+.quad .n {
+  font-family: Georgia, serif; font-size: 44px; line-height: 1; margin-top: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.quad .n small { font-family: inherit; font-size: 15px; color: var(--muted); margin-left: 8px; }
+.quad .gloss { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+.meter { height: 6px; border-radius: 3px; background: var(--hover); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 3px; }
+.meter .supported  { background: var(--supported); }
+.meter .contested  { background: var(--contested); }
+.meter .opposed    { background: var(--opposed); }
+.meter .irrelevant { background: var(--irrelevant); }
+.quad .meter { margin-top: 14px; }
+
+@media (max-width: 560px) {
+  .verdict { padding: 18px; }
+  .verdict-word, .verdict-total b { font-size: 27px; }
+  .quad { grid-template-columns: 1fr 1fr; }
+  .quad .axis { display: none; }
+  .quad .n { font-size: 34px; }
+  .quad .cell { padding: 14px; }
+  .lead-tag { display: none; }          /* the ring still marks it */
+}
+
+/* The way into the discussion, between the numbers and the reasoning. */
+.discuss-card {
+  display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 16px 20px;
+  border-radius: 14px; text-decoration: none; color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+.discuss-card:hover { border-color: var(--accent); }
+.discuss-card svg {
+  width: 26px; height: 26px; flex: none; fill: none; stroke: var(--accent);
+  stroke-width: 1.8; stroke-linejoin: round;
+}
+.discuss-card .hint { display: block; margin-top: 2px; }
+.discuss-card .go { margin-left: auto; font-weight: 600; color: var(--accent); white-space: nowrap; }
+
+/* By model: one small card per configuration. */
+.models { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 14px; }
+.model { padding: 14px 16px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.model-name { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; font-weight: 600; margin-bottom: 8px; word-break: break-all; }
+.model-meta { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.bar-row { display: grid; grid-template-columns: 36px 1fr 24px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.bar-row b { color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Tags: a coloured dot for identity, the word in ink. */
+.tag {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+  text-transform: capitalize; padding: 3px 10px 3px 8px; border-radius: 999px;
+  background: var(--hover); color: var(--ink);
+}
+.tag .dot { width: 8px; height: 8px; }
+
+/* Each ballot: a card with its reading as a stripe down the left edge. */
+.ballots { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.ballot {
+  position: relative; padding: 14px 18px 14px 22px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line); overflow: hidden;
+}
+.ballot::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--c); }
+.ballot.supported  { --c: var(--supported); }
+.ballot.contested  { --c: var(--contested); }
+.ballot.opposed    { --c: var(--opposed); }
+.ballot.irrelevant { --c: var(--irrelevant); }
+.ballot-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.model-chip {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px;
+  padding: 2px 8px; border-radius: 6px; border: 1px solid var(--line);
+}
+.ballot .who { font-size: 12px; color: var(--muted); }
+.ballot .why { margin: 10px 0 0; font-size: 15px; line-height: 1.6; }
+.ballot form { margin-top: 6px; }
+
+/* --- replying and editing inside the discussion window ----------------------
+   A <details> under each comment holds its reply box, so replying never leaves
+   the window. Closed, it is one line of markup; open, it is a form. */
+/* The actions are a row; an open reply or edit box drops below it, full width. */
+.comment-actions { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 14px; row-gap: 4px; }
+.comment-actions a, .comment-actions .linkish { margin-right: 0; }
+.inline-form { display: block; }
+.inline-form > summary {
+  display: inline; list-style: none; cursor: pointer; color: var(--accent);
+}
+.inline-form > summary::-webkit-details-marker { display: none; }
+.inline-form > summary:hover { text-decoration: underline; }
+.inline-form[open] { flex-basis: 100%; order: 10; }
+.inline-form[open] > summary { font-weight: 600; }
+.inline-form form { margin: 10px 0 4px; }
+.inline-form textarea { min-height: 80px; }
+.inline-form .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.inline-form .row button { margin-top: 0; padding: 8px 16px; }

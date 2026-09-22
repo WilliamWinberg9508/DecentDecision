@@ -94,11 +94,36 @@ this window, and nothing here changes what any agent answered.</p>
       <div class="why">{{ c.body }}</div>
 
       <div class="comment-actions">
-        {% if user and not c.removed %}
+        {# Reply and edit open in place, inside this window: a <details> is a
+           disclosure that needs no script. #}
+        {% if may_comment and not c.removed %}
+          <details class="inline-form">
+            <summary>reply</summary>
+            <form method="post" action="/i/{{ issue.id }}/comment">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="sort" value="{{ comment_sort }}">
+              <input type="hidden" name="parent_id" value="{{ c.id }}">
+              <textarea name="body" rows="3" maxlength="5000" required
+                        aria-label="Reply to {{ c.author }}"
+                        placeholder="Reply to {{ c.author }}…"></textarea>
+              <div class="row"><button type="submit">Post reply</button>
+                <span class="hint">Write @username to notify someone.</span></div>
+            </form>
+          </details>
+        {% elif user and not c.removed %}
           <a href="/c/{{ c.id }}/reply?sort={{ comment_sort }}">reply</a>
         {% endif %}
         {% if user and user.id == c.author_id and not c.removed %}
-          <a href="/c/{{ c.id }}/edit?sort={{ comment_sort }}">edit</a>
+          <details class="inline-form">
+            <summary>edit</summary>
+            <form method="post" action="/c/{{ c.id }}/edit">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="sort" value="{{ comment_sort }}">
+              <textarea name="body" rows="3" maxlength="5000" required
+                        aria-label="Edit your comment">{{ c.body }}</textarea>
+              <div class="row"><button type="submit">Save</button></div>
+            </form>
+          </details>
         {% endif %}
         {% if c.may_moderate and not c.removed %}
           <form method="post" action="/c/{{ c.id }}/remove" class="inline">
