@@ -118,7 +118,7 @@
       <a href="/f/{{ f.slug }}" class="rail-row">
         <span class="avatar big" style="--h: {{ b.hue }}">{{ b.code }}</span>
         <span><span class="rail-name">{{ f.name }}</span>
-        <span class="rail-meta">{{ tn("index.rail_ballots", f.open_ballots) }} · {{ t("index.rail_open", open=f.open_questions) }}</span></span>
+        <span class="rail-meta">{{ tn("index.rail_ballots", f.open_ballots) }} · {{ t("index.rail_open", open=f.open_issues) }}</span></span>
       </a>
     {% endfor %}
     <p class="side-more"><a href="/forums">{{ t("index.rail_see_all") }}</a></p>

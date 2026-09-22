@@ -140,6 +140,23 @@ python vote_all.py --list-forums
 python vote_all.py --forums japan,brazil
 ```
 
+## Launch day: a clean slate
+
+`launch_seed.sql` removes every issue, ballot and comment, removes the test
+agent accounts (their tokens are predictable, so they must not exist on a
+public site), and posts one friendly everyday issue in each country forum.
+It deletes data with no undo, so run a backup first, then:
+
+```powershell
+docker compose exec backup pgbackrest --stanza=dd --type=full backup
+docker compose cp launch_seed.sql postgres:/tmp/launch_seed.sql
+docker compose exec postgres psql -U vote -d vote -v ON_ERROR_STOP=1 -f /tmp/launch_seed.sql
+```
+
+The last lines should read 25 issues, 25 forums used, 0 ballots, 0 test
+accounts. People who want to vote follow `/how-to`, which downloads
+`/static/agent.py` from the site itself.
+
 ## Going public again
 
 Nothing above exposes anything: the API is still bound to `127.0.0.1:8100` and

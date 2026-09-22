@@ -509,29 +509,34 @@ CREATE INDEX IF NOT EXISTS issues_forum_idx
 -- Argentina -- settled on the UN's 2026 population and the ITU's latest usage
 -- share). Idempotent: an edited description is not overwritten on restart.
 INSERT INTO forums (slug, name, description, kind, position, created_by) VALUES
-    ('china', 'China', 'Questions about Chinese cities, regions and national policy.', 'country', 10, 'seed'),
-    ('india', 'India', 'Questions about Indian cities, regions and national policy.', 'country', 20, 'seed'),
-    ('united-states', 'United States', 'Questions about American cities, regions and national policy.', 'country', 30, 'seed'),
-    ('indonesia', 'Indonesia', 'Questions about Indonesian cities, regions and national policy.', 'country', 40, 'seed'),
-    ('brazil', 'Brazil', 'Questions about Brazilian cities, regions and national policy.', 'country', 50, 'seed'),
-    ('russia', 'Russia', 'Questions about Russian cities, regions and national policy.', 'country', 60, 'seed'),
-    ('pakistan', 'Pakistan', 'Questions about Pakistani cities, regions and national policy.', 'country', 70, 'seed'),
-    ('mexico', 'Mexico', 'Questions about Mexican cities, regions and national policy.', 'country', 80, 'seed'),
-    ('japan', 'Japan', 'Questions about Japanese cities, regions and national policy.', 'country', 90, 'seed'),
-    ('nigeria', 'Nigeria', 'Questions about Nigerian cities, regions and national policy.', 'country', 100, 'seed'),
-    ('philippines', 'Philippines', 'Questions about Philippine cities, regions and national policy.', 'country', 110, 'seed'),
-    ('egypt', 'Egypt', 'Questions about Egyptian cities, regions and national policy.', 'country', 120, 'seed'),
-    ('vietnam', 'Vietnam', 'Questions about Vietnamese cities, regions and national policy.', 'country', 130, 'seed'),
-    ('germany', 'Germany', 'Questions about German cities, regions and national policy.', 'country', 140, 'seed'),
-    ('bangladesh', 'Bangladesh', 'Questions about Bangladeshi cities, regions and national policy.', 'country', 150, 'seed'),
-    ('turkey', 'Türkiye', 'Questions about Turkish cities, regions and national policy.', 'country', 160, 'seed'),
-    ('iran', 'Iran', 'Questions about Iranian cities, regions and national policy.', 'country', 170, 'seed'),
-    ('united-kingdom', 'United Kingdom', 'Questions about British cities, regions and national policy.', 'country', 180, 'seed'),
-    ('thailand', 'Thailand', 'Questions about Thai cities, regions and national policy.', 'country', 190, 'seed'),
-    ('france', 'France', 'Questions about French cities, regions and national policy.', 'country', 200, 'seed'),
-    ('italy', 'Italy', 'Questions about Italian cities, regions and national policy.', 'country', 210, 'seed'),
-    ('south-africa', 'South Africa', 'Questions about South African cities, regions and national policy.', 'country', 220, 'seed'),
-    ('south-korea', 'South Korea', 'Questions about South Korean cities, regions and national policy.', 'country', 230, 'seed'),
-    ('spain', 'Spain', 'Questions about Spanish cities, regions and national policy.', 'country', 240, 'seed'),
-    ('colombia', 'Colombia', 'Questions about Colombian cities, regions and national policy.', 'country', 250, 'seed')
+    ('china', 'China', 'Issues in Chinese cities, regions and national policy.', 'country', 10, 'seed'),
+    ('india', 'India', 'Issues in Indian cities, regions and national policy.', 'country', 20, 'seed'),
+    ('united-states', 'United States', 'Issues in American cities, regions and national policy.', 'country', 30, 'seed'),
+    ('indonesia', 'Indonesia', 'Issues in Indonesian cities, regions and national policy.', 'country', 40, 'seed'),
+    ('brazil', 'Brazil', 'Issues in Brazilian cities, regions and national policy.', 'country', 50, 'seed'),
+    ('russia', 'Russia', 'Issues in Russian cities, regions and national policy.', 'country', 60, 'seed'),
+    ('pakistan', 'Pakistan', 'Issues in Pakistani cities, regions and national policy.', 'country', 70, 'seed'),
+    ('mexico', 'Mexico', 'Issues in Mexican cities, regions and national policy.', 'country', 80, 'seed'),
+    ('japan', 'Japan', 'Issues in Japanese cities, regions and national policy.', 'country', 90, 'seed'),
+    ('nigeria', 'Nigeria', 'Issues in Nigerian cities, regions and national policy.', 'country', 100, 'seed'),
+    ('philippines', 'Philippines', 'Issues in Philippine cities, regions and national policy.', 'country', 110, 'seed'),
+    ('egypt', 'Egypt', 'Issues in Egyptian cities, regions and national policy.', 'country', 120, 'seed'),
+    ('vietnam', 'Vietnam', 'Issues in Vietnamese cities, regions and national policy.', 'country', 130, 'seed'),
+    ('germany', 'Germany', 'Issues in German cities, regions and national policy.', 'country', 140, 'seed'),
+    ('bangladesh', 'Bangladesh', 'Issues in Bangladeshi cities, regions and national policy.', 'country', 150, 'seed'),
+    ('turkey', 'Türkiye', 'Issues in Turkish cities, regions and national policy.', 'country', 160, 'seed'),
+    ('iran', 'Iran', 'Issues in Iranian cities, regions and national policy.', 'country', 170, 'seed'),
+    ('united-kingdom', 'United Kingdom', 'Issues in British cities, regions and national policy.', 'country', 180, 'seed'),
+    ('thailand', 'Thailand', 'Issues in Thai cities, regions and national policy.', 'country', 190, 'seed'),
+    ('france', 'France', 'Issues in French cities, regions and national policy.', 'country', 200, 'seed'),
+    ('italy', 'Italy', 'Issues in Italian cities, regions and national policy.', 'country', 210, 'seed'),
+    ('south-africa', 'South Africa', 'Issues in South African cities, regions and national policy.', 'country', 220, 'seed'),
+    ('south-korea', 'South Korea', 'Issues in South Korean cities, regions and national policy.', 'country', 230, 'seed'),
+    ('spain', 'Spain', 'Issues in Spanish cities, regions and national policy.', 'country', 240, 'seed'),
+    ('colombia', 'Colombia', 'Issues in Colombian cities, regions and national policy.', 'country', 250, 'seed')
 ON CONFLICT (slug) DO NOTHING;
+
+-- The site calls them issues now. Brings forum descriptions written by an
+-- older version into line; touches only the seeded ones, and only once.
+UPDATE forums SET description = 'Issues in ' || substr(description, 17)
+ WHERE created_by = 'seed' AND description LIKE 'Questions about %';

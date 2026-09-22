@@ -9,10 +9,11 @@ keys = {}
 def flat(d, p=""):
     for k, v in d.items():
         if isinstance(v, dict): flat(v, p + k + ".")
+        elif isinstance(v, list): keys[p + k] = v      # a table, used via rows()
         else: keys[p + k] = v
 for f in files:
     flat(tomllib.loads(f.read_text(encoding="utf-8")))
-USE = re.compile(r"""\b(t|tn|msg)\(\s*["']([a-z0-9_.]+)["']""")
+USE = re.compile(r"""\b(t|tn|msg|rows)\(\s*["']([a-z0-9_.]+)["']""")
 # Keys built at run time, like t("issue.quadrant_%s" | format(q)): every key
 # with that prefix counts as used.
 DYN = re.compile(r"""\b(?:t|tn|msg)\(\s*["']([a-z0-9_.]+)%s""")

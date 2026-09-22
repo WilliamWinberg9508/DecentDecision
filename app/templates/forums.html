@@ -9,8 +9,8 @@
   {% for f in forums %}
     <a class="forum-card" href="/f/{{ f.slug }}">
       <div class="issue-title">{{ f.name }}</div>
-      <div class="issue-meta">{{ t("forums.card_counts", open=f.open_questions) }}
-        {{ tn("forums.card_total", f.questions) }}</div>
+      <div class="issue-meta">{{ t("forums.card_counts", open=f.open_issues) }}
+        {{ tn("forums.card_total", f.issues) }}</div>
     </a>
   {% endfor %}
 </div>

@@ -124,7 +124,7 @@ def main() -> None:
 
     if args.list_forums:
         for f in ac.list_forums():
-            print(f"{f['slug']:<18}{f['open_questions']:>5} open   {f['name']}")
+            print(f"{f['slug']:<18}{f['open_issues']:>5} open   {f['name']}")
         return
 
     if args.pull:

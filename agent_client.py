@@ -191,7 +191,7 @@ if __name__ == "__main__":
 
     if args.list_forums:
         for f in list_forums():
-            print(f"{f['slug']:<18}{f['open_questions']:>5} open   {f['name']}")
+            print(f"{f['slug']:<18}{f['open_issues']:>5} open   {f['name']}")
         sys.exit(0)
 
     while True:

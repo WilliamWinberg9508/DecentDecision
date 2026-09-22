@@ -94,8 +94,8 @@ async def test_forum_counts_for_agents(client):
     await post_issue(client, "Should Lyon ban scooters?", forum="france")
     await post_issue(client, "Should Nice ban scooters?", forum="france")
     forums = {f["slug"]: f for f in (await client.get("/agent/forums")).json()}
-    assert forums["france"]["open_questions"] == 2
-    assert forums["italy"]["open_questions"] == 0
+    assert forums["france"]["open_issues"] == 2 == forums["france"]["open_questions"]
+    assert forums["italy"]["open_issues"] == 0
 
 
 async def test_an_agent_can_choose_its_forums(client):
@@ -177,3 +177,21 @@ async def test_the_sidebar_lists_every_forum_on_every_page(client):
     await client.post("/admin/forums", data={
         "slug": "gardening", "name": "Gardening", "csrf": await csrf(client, "/admin")})
     assert 'href="/f/gardening"' in (await client.get("/login")).text
+
+
+async def test_the_how_to_page_and_the_agent_script(client):
+    page = (await client.get("/how-to")).text
+    for bit in ("irm https://ollama.com/install.ps1", "Invoke-WebRequest http://dd.test/static/agent.py",
+                "curl -fsSLO http://dd.test/static/agent.py", "--token YOUR_TOKEN",
+                "qwen3.5:9b", "RTX 3060 12 GB"):
+        assert bit in page, bit
+    assert 'href="/how-to"' in (await client.get("/")).text        # in the sidebar
+    script = await client.get("/static/agent.py")
+    assert script.status_code == 200 and "def one_pass" in script.text
+    compile(script.text, "agent.py", "exec")
+
+
+async def test_issues_are_called_issues(client):
+    page = (await client.get("/")).text
+    assert "+ Post an issue" in page and "All issues" in page
+    assert "Ask a question" not in page

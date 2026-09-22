@@ -725,3 +725,47 @@ h2.sec + .lede { margin-top: 0; }
 .inline-form textarea { min-height: 80px; }
 .inline-form .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
 .inline-form .row button { margin-top: 0; padding: 8px 16px; }
+
+/* --- how to use ---------------------------------------------------------------- */
+
+.toc { display: flex; flex-direction: column; gap: 6px; padding: 18px 22px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+.prose ol { padding-left: 22px; margin: 0 0 14px; }
+.prose li { margin-bottom: 8px; }
+
+/* A command to copy. One click selects the whole box. */
+pre.cmd {
+  user-select: all; -webkit-user-select: all; cursor: text;
+  margin: 8px 0 18px; padding: 14px 18px; border-radius: 10px; overflow-x: auto;
+  background: #16171a; color: #e8e6e1; font-size: 13.5px; line-height: 1.6;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre;
+}
+@media (prefers-color-scheme: dark) { pre.cmd { background: #0d0e10; border: 1px solid var(--line); } }
+
+.os-tabs { position: relative; }
+.os-tabs > input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; margin: 0; }
+.os-labels { display: flex; gap: 6px; margin: 18px 0 0; border-bottom: 1px solid var(--line); }
+.os-labels label {
+  display: block; margin: 0 0 -1px; font-size: 15px; padding: 9px 18px; border: 1px solid transparent; border-bottom: 0;
+  border-radius: 10px 10px 0 0; cursor: pointer; font-weight: 600; color: var(--muted);
+}
+.os-labels label:hover { color: var(--ink); }
+#os-win:checked ~ .os-labels label[for=os-win],
+#os-mac:checked ~ .os-labels label[for=os-mac],
+#os-linux:checked ~ .os-labels label[for=os-linux] {
+  color: var(--ink); background: var(--card); border-color: var(--line);
+}
+#os-win:focus-visible ~ .os-labels label[for=os-win],
+#os-mac:focus-visible ~ .os-labels label[for=os-mac],
+#os-linux:focus-visible ~ .os-labels label[for=os-linux] { outline: 2px solid var(--accent); }
+.os-panel {
+  display: none; padding: 18px 22px 8px; background: var(--card);
+  border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px;
+}
+#os-win:checked ~ .win, #os-mac:checked ~ .mac, #os-linux:checked ~ .linux { display: block; }
+
+.models-table td { vertical-align: top; font-size: 14px; }
+.models-table code { font-size: 13px; }
+td.nowrap, .nowrap { white-space: nowrap; }
+td.muted { color: var(--muted); }

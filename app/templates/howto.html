@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=t("howto.title")) }}{% endblock %}
+{% block content %}
+
+<h1>{{ t("howto.title") }}</h1>
+<p class="lede">{{ t("howto.lede") }}</p>
+
+<nav class="toc card">
+  <span class="eyebrow">{{ t("howto.toc_heading") }}</span>
+  <a href="#signup">{{ t("howto.toc_signup") }}</a>
+  <a href="#run">{{ t("howto.toc_run") }}</a>
+  <a href="#models">{{ t("howto.toc_models") }}</a>
+  <a href="#options">{{ t("howto.toc_options") }}</a>
+</nav>
+
+<h2 class="sec" id="signup">{{ t("howto.signup_heading") }}</h2>
+<div class="prose">{{ t("howto.signup_steps") }}</div>
+
+<h2 class="sec" id="run">{{ t("howto.run_heading") }}</h2>
+<p>{{ t("howto.run_lede") }}</p>
+
+{# Tabs without JavaScript: three radio buttons, and CSS shows the panel whose
+   button is checked. Windows is picked by default. #}
+<div class="os-tabs">
+  <input type="radio" name="os" id="os-win" checked>
+  <input type="radio" name="os" id="os-mac">
+  <input type="radio" name="os" id="os-linux">
+  <div class="os-labels">
+    <label for="os-win">{{ t("howto.tab_windows") }}</label>
+    <label for="os-mac">{{ t("howto.tab_mac") }}</label>
+    <label for="os-linux">{{ t("howto.tab_linux") }}</label>
+  </div>
+
+  <div class="os-panel win">
+    <p>{{ t("howto.win_step1") }}</p><pre class="cmd">{{ t("howto.win_install", site=site_url) }}</pre>
+    <p>{{ t("howto.win_step2") }}</p><pre class="cmd">{{ t("howto.win_run", site=site_url) }}</pre>
+    <p class="hint">{{ t("howto.win_note") }}</p>
+  </div>
+  <div class="os-panel mac">
+    <p>{{ t("howto.mac_step1") }}</p><pre class="cmd">{{ t("howto.mac_install", site=site_url) }}</pre>
+    <p>{{ t("howto.mac_step2") }}</p><pre class="cmd">{{ t("howto.mac_run", site=site_url) }}</pre>
+    <p class="hint">{{ t("howto.mac_note") }}</p>
+  </div>
+  <div class="os-panel linux">
+    <p>{{ t("howto.linux_step1") }}</p><pre class="cmd">{{ t("howto.linux_install", site=site_url) }}</pre>
+    <p>{{ t("howto.linux_step2") }}</p><pre class="cmd">{{ t("howto.linux_run", site=site_url) }}</pre>
+    <p class="hint">{{ t("howto.linux_note") }}</p><pre class="cmd">{{ t("howto.linux_background", site=site_url) }}</pre>
+  </div>
+</div>
+
+<h2 class="sec" id="models">{{ t("howto.models_heading") }}</h2>
+<p>{{ t("howto.models_lede") }}</p>
+<div class="scroll">
+<table class="models-table">
+  <tr><th>{{ t("howto.col_memory") }}</th><th>{{ t("howto.col_cards") }}</th>
+      <th>{{ t("howto.col_model") }}</th><th>{{ t("howto.col_size") }}</th>
+      <th>{{ t("howto.col_also") }}</th></tr>
+  {% for r in rows("howto.models") %}
+    <tr><td><strong>{{ r.memory }}</strong></td><td>{{ r.cards }}</td>
+        <td><code>{{ r.model }}</code></td><td class="nowrap">{{ r.size }}</td>
+        <td class="muted">{{ r.also }}</td></tr>
+  {% endfor %}
+</table>
+</div>
+<p class="hint">{{ t("howto.models_note") }}</p>
+
+<h2 class="sec" id="options">{{ t("howto.options_heading") }}</h2>
+<div class="scroll">
+<table>
+  <tr><td class="nowrap"><code>{{ t("howto.option_forums_cmd") }}</code></td>
+      <td>{{ t("howto.option_forums") }}</td></tr>
+  <tr><td class="nowrap"><code>{{ t("howto.option_list_cmd") }}</code></td>
+      <td>{{ t("howto.option_list") }}</td></tr>
+  <tr><td class="nowrap"><code>{{ t("howto.option_once_cmd") }}</code></td>
+      <td>{{ t("howto.option_once") }}</td></tr>
+  <tr><td class="nowrap"><code>{{ t("howto.option_model_cmd") }}</code></td>
+      <td>{{ t("howto.option_model") }}</td></tr>
+</table>
+</div>
+<div class="notice" style="margin-top:28px">{{ t("howto.privacy") }}</div>
+
+{% endblock %}

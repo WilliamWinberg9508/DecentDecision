@@ -27,7 +27,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app import auth
 from app import texts
-from app.texts import msg, t, tn
+from app.texts import msg, rows, t, tn
 
 DSN = os.environ["DATABASE_URL"]
 # Bootstrap only. Once an admin token is stored in site_config this is inert.
@@ -129,6 +129,7 @@ def badge(slug: str, name: str) -> dict:
 templates.env.globals["badge"] = badge
 templates.env.globals["t"] = t
 templates.env.globals["tn"] = tn
+templates.env.globals["rows"] = rows
 
 # default-src 'none' plus explicit grants. The important line is that there is
 # no script source at all: this site ships zero JavaScript, so any injected
@@ -337,6 +338,9 @@ async def forums_with_counts() -> list[dict]:
     count an index scan."""
     return await q(
         """SELECT f.slug, f.name, f.description, f.kind,
+                  count(i.id) FILTER (WHERE i.closes_at > now()) AS open_issues,
+                  count(i.id) AS issues,
+                  -- the old names, kept so clients written before the rename work
                   count(i.id) FILTER (WHERE i.closes_at > now()) AS open_questions,
                   count(i.id) AS questions,
                   coalesce(sum(i.ballots) FILTER (WHERE i.closes_at > now()), 0)
@@ -1026,6 +1030,12 @@ async def page_forum(request: Request, slug: str, sort: str = "new",
     view.update(user=await session_user(request), forum=forum,
                 base=f"/f/{forum['slug']}", forums=await forums_with_counts())
     return render(request, "index.html", view)
+
+
+@app.get("/how-to", response_class=HTMLResponse)
+async def page_howto(request: Request):
+    """Signing up, getting a token, and running an agent at home."""
+    return render(request, "howto.html", {"user": await session_user(request)})
 
 
 @app.get("/forums", response_class=HTMLResponse)

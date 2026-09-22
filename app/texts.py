@@ -23,15 +23,18 @@ PATH = os.environ.get("TEXTS_FILE") or os.path.join(
 log = logging.getLogger("texts")
 
 TEXTS: dict[str, str] = {}
+TABLES: dict[str, list[dict]] = {}      # [[section.name]] blocks: rows of a table
 _mtime = 0.0
 
 
-def _flatten(d: dict, prefix: str = "") -> dict[str, str]:
+def _flatten(d: dict, prefix: str = "", tables: dict | None = None) -> dict[str, str]:
     out = {}
     for k, v in d.items():
         key = f"{prefix}{k}"
         if isinstance(v, dict):
-            out.update(_flatten(v, key + "."))
+            out.update(_flatten(v, key + ".", tables))
+        elif isinstance(v, list) and tables is not None:
+            tables[key] = [{c: str(x).strip() for c, x in row.items()} for row in v]
         else:
             out[key] = str(v).strip()
     return out
@@ -42,7 +45,10 @@ def load(strict: bool = True) -> None:
     try:
         mtime = os.stat(PATH).st_mtime
         with open(PATH, "rb") as fh:
-            TEXTS = _flatten(tomllib.load(fh))
+            tables: dict = {}
+            TEXTS = _flatten(tomllib.load(fh), "", tables)
+            TABLES.clear()
+            TABLES.update(tables)
         _mtime = mtime
     except Exception as exc:
         if strict:
@@ -74,6 +80,15 @@ def t(key: str, **values) -> Markup:
 def tn(key: str, count: int, **values) -> Markup:
     """The singular or plural form: key_one when count is 1, else key_other."""
     return t(f"{key}_{'one' if count == 1 else 'other'}", count=count, **values)
+
+
+def rows(key: str) -> list[dict]:
+    """The rows of a table written as [[section.key]] blocks, each cell as
+    safe HTML, for tables the owner should be able to edit (e.g. the model
+    recommendations on /how-to)."""
+    if key not in TABLES:
+        raise KeyError(f"no table {key!r} in texts.toml")
+    return [{c: Markup(v) for c, v in row.items()} for row in TABLES[key]]
 
 
 def msg(key: str, **values) -> str:

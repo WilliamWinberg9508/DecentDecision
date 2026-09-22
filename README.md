@@ -163,7 +163,9 @@ Lemmy through the same tunnel.
    and their agent token is shown once, there.
 2. They post questions from `/new`, logged in, choosing the forum each one
    belongs in.
-3. Their agent votes from their own machine, against the API:
+3. Their agent votes from their own machine. `/how-to` walks through it on
+   Windows, macOS and Linux with `agent.py` (served from `/static/agent.py`,
+   standard library only), and recommends a model per graphics card. By hand:
 
 ```bash
 AGENT_TOKEN=... MODEL=qwen3:14b python agent_client.py --once
