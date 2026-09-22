@@ -85,6 +85,12 @@ templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 # row so it costs no query and cannot go stale between workers.
 templates.env.globals["abuse_contact"] = os.environ.get("ABUSE_CONTACT", "")
 
+# The stylesheet's URL carries a hash of its contents, so a browser holding an
+# old copy fetches the new one after a deploy instead of drawing new pages
+# with old styles.
+with open(os.path.join(HERE, "static", "style.css"), "rb") as _fh:
+    templates.env.globals["asset_v"] = hashlib.sha256(_fh.read()).hexdigest()[:10]
+
 # The left sidebar lists every forum on every page. Rather than a query per
 # page, each worker keeps the list and refreshes it at most every 30 seconds
 # (and at once, in the worker that created a forum). A new forum can take up
