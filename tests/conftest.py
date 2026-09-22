@@ -51,6 +51,10 @@ os.environ.update(
 )
 
 import httpx                                            # noqa: E402
+import email_validator                                   # noqa: E402
+# The tests register people at @example.test; real sign-ups may not use the
+# reserved .test domain, and this lets only the tests do so.
+email_validator.TEST_ENVIRONMENT = True
 from app import auth                                    # noqa: E402
 from app import main as dd                               # noqa: E402
 

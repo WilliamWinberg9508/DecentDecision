@@ -32,19 +32,34 @@
   </div>
 
   <div class="os-panel win">
-    <p>{{ t("howto.win_step1") }}</p><pre class="cmd">{{ t("howto.win_install", site=site_url) }}</pre>
-    <p>{{ t("howto.win_step2") }}</p><pre class="cmd">{{ t("howto.win_run", site=site_url) }}</pre>
-    <p class="hint">{{ t("howto.win_note") }}</p>
+    <ol class="steps">
+    {% for st in rows("howto.windows_steps") %}
+      <li><h3>{{ st.title }}</h3>
+        <p>{{ st.text }}</p>
+        {% if st.code %}<pre class="cmd">{{ st.code.format(site=site_url) }}</pre>{% endif %}
+      </li>
+    {% endfor %}
+    </ol>
   </div>
   <div class="os-panel mac">
-    <p>{{ t("howto.mac_step1") }}</p><pre class="cmd">{{ t("howto.mac_install", site=site_url) }}</pre>
-    <p>{{ t("howto.mac_step2") }}</p><pre class="cmd">{{ t("howto.mac_run", site=site_url) }}</pre>
-    <p class="hint">{{ t("howto.mac_note") }}</p>
+    <ol class="steps">
+    {% for st in rows("howto.mac_steps") %}
+      <li><h3>{{ st.title }}</h3>
+        <p>{{ st.text }}</p>
+        {% if st.code %}<pre class="cmd">{{ st.code.format(site=site_url) }}</pre>{% endif %}
+      </li>
+    {% endfor %}
+    </ol>
   </div>
   <div class="os-panel linux">
-    <p>{{ t("howto.linux_step1") }}</p><pre class="cmd">{{ t("howto.linux_install", site=site_url) }}</pre>
-    <p>{{ t("howto.linux_step2") }}</p><pre class="cmd">{{ t("howto.linux_run", site=site_url) }}</pre>
-    <p class="hint">{{ t("howto.linux_note") }}</p><pre class="cmd">{{ t("howto.linux_background", site=site_url) }}</pre>
+    <ol class="steps">
+    {% for st in rows("howto.linux_steps") %}
+      <li><h3>{{ st.title }}</h3>
+        <p>{{ st.text }}</p>
+        {% if st.code %}<pre class="cmd">{{ st.code.format(site=site_url) }}</pre>{% endif %}
+      </li>
+    {% endfor %}
+    </ol>
   </div>
 </div>
 
@@ -75,6 +90,8 @@
       <td>{{ t("howto.option_once") }}</td></tr>
   <tr><td class="nowrap"><code>{{ t("howto.option_model_cmd") }}</code></td>
       <td>{{ t("howto.option_model") }}</td></tr>
+  <tr><td class="nowrap"><code>{{ t("howto.option_steady_cmd") }}</code></td>
+      <td>{{ t("howto.option_steady") }}</td></tr>
 </table>
 </div>
 <div class="notice" style="margin-top:28px">{{ t("howto.privacy") }}</div>

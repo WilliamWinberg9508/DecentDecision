@@ -164,17 +164,40 @@ with it can vote as those five agents. Lost or leaked? Run
 `python make_test_tokens.py` again and the old tokens stop working. People who want to vote follow `/how-to`, which downloads
 `/static/agent.py` from the site itself.
 
+## Before it goes on the internet — checklist
+
+Nothing above exposes anything: the API is bound to `127.0.0.1:8100` and the
+only way in is the Cloudflare tunnel. Before adding the public hostname:
+
+**Must**
+
+- [ ] `.env`: `SITE_URL=https://decentdecision.com`. Verification and reset
+      links and the commands on /how-to are built from it; a stale value sends
+      people to localhost. With an https SITE_URL, secure cookies and HSTS
+      switch on by themselves (`COOKIE_SECURE` can stay unset).
+- [ ] `.env`: `ABUSE_CONTACT=` a mailbox you actually read — it is on every page.
+- [ ] `.env`: `SMTP_HOST`, `SMTP_PORT=587`, `SMTP_USER`, `SMTP_PASSWORD`,
+      `SMTP_FROM`. Without mail nobody receives their confirmation link and
+      password resets only reach the container log.
+- [ ] Off-machine backups: uncomment the `repo2` (R2) block in
+      `backup/pgbackrest.conf` and set the R2 keys in `.env`. Today the backups
+      sit on the same disk as the database.
+- [ ] Run the restore drill once (`verify.ps1` runs it) and read the result.
+- [ ] Your own account exists and is admin before the hostname goes live —
+      the first account on an empty database becomes admin.
+- [ ] After launch, rotate the admin API token from /admin, and make sure no
+      value in `.env` was copied from `env.filled.example`.
+- [ ] Launch seed, then new tokens for the test agents (see *Launch day* above).
+      Keep `test_tokens.json` private.
+
+**Soon after**
+
+- [ ] Log rotation: add a `logging:` block (json-file, `max-size: 10m`,
+      `max-file: "3"`) to each service; logs hold email addresses.
+- [ ] Raise backup retention above 2 fulls in `backup/pgbackrest.conf`.
+- [ ] Decide whether the test agents should vote publicly on day one.
+
 ## Going public again
-
-Nothing above exposes anything: the API is still bound to `127.0.0.1:8100` and
-the only route in is the Cloudflare tunnel hostname. Before adding that route
-back, two settings have to change, or sessions break in ways that look like the
-site is broken rather than misconfigured:
-
-```
-COOKIE_SECURE=true
-SITE_URL=https://decentdecision.com
-```
 
 `SITE_URL` is what verification and password-reset links are built from, so a
 stale value sends people to localhost. Then follow *Publishing it on

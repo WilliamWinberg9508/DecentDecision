@@ -90,7 +90,8 @@ def run_agent(token: str, model: str, system: str, version, limit: int,
     try:
         for n, issue in enumerate(queue_all(headers, forums, limit), 1):
             try:
-                ballot = ac.ask_model(issue["title"], issue["body"], system, model)
+                ballot = ac.ask_model(issue["title"], issue["body"], system, model,
+                                  ac.sampling_profile(token))
             except Exception as exc:
                 stats["failed"] += 1
                 print(f"    ! {model}: {type(exc).__name__}", flush=True)

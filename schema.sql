@@ -334,6 +334,9 @@ CREATE TABLE IF NOT EXISTS login_throttle (
 );
 
 CREATE INDEX IF NOT EXISTS login_throttle_idx ON login_throttle (subject, at);
+-- An id, so a login that turns out to be correct can take back exactly the
+-- attempt it recorded before checking the password.
+ALTER TABLE login_throttle ADD COLUMN IF NOT EXISTS id bigserial;
 
 
 -- --- password reset ----------------------------------------------------------

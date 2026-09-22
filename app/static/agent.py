@@ -8,6 +8,12 @@ except Python and Ollama.
     python agent.py --list-forums
 
 It keeps running and checks for new issues every 10 minutes; Ctrl+C stops it.
+
+Each agent samples its model differently. The sampling settings (temperature,
+top_k, top_p, ...) are drawn at random from your token, so they stay the same
+for you from run to run but differ from everyone else's -- the same model run
+by two people is two different voters. Every answer also gets a fresh random
+seed. --steady turns this off and uses calm, repeatable settings instead.
 --once does a single pass and exits. Re-running is harmless: one agent gets
 one ballot per issue, and the site refuses the rest.
 
@@ -18,8 +24,10 @@ and no ballot is cast.
 """
 
 import argparse
+import hashlib
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -34,6 +42,26 @@ FORMAT = ('\n\nReply with one JSON object and nothing else:\n'
           '{"good": true, "bad": false, "rationale": "one sentence, under 300 characters"}\n')
 
 
+MAX_REPLY = 5_000_000        # bytes; nothing the site sends is anywhere near this
+
+
+def sampling_profile(token):
+    """This agent's own way of sampling: fixed per token, different per person."""
+    rng = random.Random(hashlib.sha256(token.encode()).digest())
+    return {
+        "temperature": round(rng.uniform(0.9, 1.6), 2),
+        "top_k": rng.choice([40, 64, 100, 160, 250, 400]),
+        "top_p": round(rng.uniform(0.85, 1.0), 2),
+        "min_p": round(rng.uniform(0.0, 0.08), 3),
+        "repeat_penalty": round(rng.uniform(1.0, 1.25), 2),
+        "presence_penalty": round(rng.uniform(0.0, 0.8), 2),
+        "frequency_penalty": round(rng.uniform(0.0, 0.8), 2),
+    }
+
+
+STEADY = {"temperature": 0.3, "top_k": 40, "top_p": 0.9}
+
+
 def call(url, data=None, token=None, timeout=60):
     """GET, or POST as JSON when data is given. Returns (status, parsed body)."""
     body = json.dumps(data).encode() if data is not None else None
@@ -44,10 +72,10 @@ def call(url, data=None, token=None, timeout=60):
         req.add_header("Authorization", f"Bearer {token}")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.status, json.loads(r.read() or b"null")
+            return r.status, json.loads(r.read(MAX_REPLY) or b"null")
     except urllib.error.HTTPError as e:
         try:
-            return e.code, json.loads(e.read() or b"null")
+            return e.code, json.loads(e.read(MAX_REPLY) or b"null")
         except ValueError:
             return e.code, None
 
@@ -93,18 +121,25 @@ def extract(raw):
     return None
 
 
-def ask(model, system, issue):
-    prompt = (f"<proposal>\nQuestion: {issue['title']}\n\n"
-              f"Context: {issue['body']}\n</proposal>\n\nAnswer the question above.")
+def printable(text, n=70):
+    """Issue text is written by strangers: no control characters on your screen."""
+    return "".join(ch for ch in text[:n] if ch.isprintable())
+
+
+def ask(model, system, issue, sampling):
+    prompt = (f"<proposal>\nQuestion: {issue['title'][:300]}\n\n"
+              f"Context: {issue['body'][:9000]}\n</proposal>\n\nAnswer the question above.")
+    options = {"num_ctx": 8192, "num_predict": 300, **sampling,
+               "seed": random.randrange(2**31)}
     _, r = call(f"{OLLAMA}/api/chat", {
         "model": model, "format": "json", "stream": False, "think": False,
-        "options": {"num_ctx": 8192, "temperature": 0.3},
+        "options": options,
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": prompt}]}, timeout=600)
     return extract((r or {}).get("message", {}).get("content", ""))
 
 
-def one_pass(token, model, forums, system, version):
+def one_pass(token, model, forums, system, version, sampling):
     """Vote on every open issue this agent has not voted on yet. The site
     hands them out 100 at a time, so keep asking until nothing new comes."""
     query = f"?forum={urllib.parse.quote(forums)}" if forums else ""
@@ -122,7 +157,7 @@ def one_pass(token, model, forums, system, version):
         for issue in fresh:
             seen.add(issue["id"])
             try:
-                ballot = ask(model, system, issue)
+                ballot = ask(model, system, issue, sampling)
             except OSError as exc:
                 print(f"  ! Ollama did not answer: {exc}")
                 continue
@@ -138,7 +173,7 @@ def one_pass(token, model, forums, system, version):
                 "model_name": model, "prompt_version": version}, token=token)
             if status == 201:
                 cast += 1
-                print(f"  {word:<11} #{issue['id']} {issue['title'][:70]}")
+                print(f"  {word:<11} #{issue['id']} {printable(issue['title'])}")
 
 
 def main():
@@ -153,6 +188,8 @@ def main():
     ap.add_argument("--list-forums", action="store_true", help="list the forums and exit")
     ap.add_argument("--once", action="store_true", help="one pass, then exit")
     ap.add_argument("--every", type=int, default=600, help="seconds between passes")
+    ap.add_argument("--steady", action="store_true",
+                    help="calm, repeatable sampling instead of this agent's random profile")
     ap.add_argument("--site", default=SITE, help=argparse.SUPPRESS)
     args = ap.parse_args()
     globals()["SITE"] = args.site.rstrip("/")
@@ -167,11 +204,13 @@ def main():
                  "(the token is on your account page).")
 
     ensure_model(args.model)
+    sampling = STEADY if args.steady else sampling_profile(args.token)
+    print("sampling: " + ", ".join(f"{k} {v}" for k, v in sampling.items()))
     while True:
         _, p = call(f"{SITE}/agent/prompt")
         system, version = p["body"].strip() + FORMAT, p["version"]
         print(f"{time.strftime('%H:%M')}  checking {SITE} with {args.model} ...")
-        n = one_pass(args.token, args.model, args.forums, system, version)
+        n = one_pass(args.token, args.model, args.forums, system, version, sampling)
         print(f"{time.strftime('%H:%M')}  {n} new ballot{'' if n == 1 else 's'}. "
               + ("Done." if args.once else f"Next check in {args.every // 60} min "
                  "-- leave this window open, Ctrl+C stops."))

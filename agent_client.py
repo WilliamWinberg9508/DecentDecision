@@ -14,8 +14,10 @@ whole defence, and it is worth more than any wording in the system prompt.
 """
 
 import argparse
+import hashlib
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -68,6 +70,21 @@ JSON_RE = re.compile(r"\{.*\}", re.S)
 JSON_FLAT_RE = re.compile(r"\{[^{}]*\}", re.S)
 
 
+def sampling_profile(token: str) -> dict:
+    """Same as agent.py: each token gets its own fixed, random way of sampling,
+    so the same model run by different people behaves like different voters."""
+    rng = random.Random(hashlib.sha256(token.encode()).digest())
+    return {
+        "temperature": round(rng.uniform(0.9, 1.6), 2),
+        "top_k": rng.choice([40, 64, 100, 160, 250, 400]),
+        "top_p": round(rng.uniform(0.85, 1.0), 2),
+        "min_p": round(rng.uniform(0.0, 0.08), 3),
+        "repeat_penalty": round(rng.uniform(1.0, 1.25), 2),
+        "presence_penalty": round(rng.uniform(0.0, 0.8), 2),
+        "frequency_penalty": round(rng.uniform(0.0, 0.8), 2),
+    }
+
+
 def extract(raw: str) -> dict | None:
     for match in [JSON_RE.search(raw), *JSON_FLAT_RE.finditer(raw)]:
         if not match:
@@ -81,7 +98,8 @@ def extract(raw: str) -> dict | None:
     return None
 
 
-def ask_model(title: str, body: str, system: str, model: str = "") -> dict | None:
+def ask_model(title: str, body: str, system: str, model: str = "",
+              sampling: dict | None = None) -> dict | None:
     model = model or MODEL
     # The title is the proposition; the body is what it means and what it
     # costs. Labelling them separately is what stops a model voting on the
@@ -103,7 +121,9 @@ def ask_model(title: str, body: str, system: str, model: str = "") -> dict | Non
         # Ollama's default context is small. An 8000-character proposal would
         # be silently truncated from the front -- the model would vote on half
         # a proposal and never say so. Set it explicitly.
-        "options": {"num_ctx": 8192, "temperature": 0.3},
+        "options": {"num_ctx": 8192, "num_predict": 300,
+                    **(sampling or {"temperature": 0.3}),
+                    "seed": random.randrange(2**31)},
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": prompt}],
     })

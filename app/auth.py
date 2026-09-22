@@ -76,7 +76,10 @@ COOKIE = "dd_session"
 # Set COOKIE_SECURE=true once the site is served over HTTPS. It must stay false
 # on plain http://localhost, because a Secure cookie is simply never sent there
 # and every login would appear to succeed and then do nothing.
-SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+# Left unset, it follows SITE_URL: https means secure cookies (and HSTS).
+_secure = os.environ.get("COOKIE_SECURE", "").strip().lower()
+SECURE = (_secure == "true") if _secure else \
+    os.environ.get("SITE_URL", "").lower().startswith("https://")
 
 
 def new_session_token() -> str:

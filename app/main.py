@@ -9,6 +9,7 @@ interesting case (good AND bad -- worth doing, real costs).
 """
 
 import hashlib
+import ipaddress
 import os
 import re
 import secrets
@@ -21,8 +22,10 @@ from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, EmailStr, Field
 
 from app import auth
@@ -75,7 +78,10 @@ async def lifespan(_app: FastAPI):
     await pool.close()
 
 
-app = FastAPI(title="Decent Decision", lifespan=lifespan)
+# No /docs, /redoc or /openapi.json: a public map of every route, admin ones
+# included, helps nobody but someone probing the site.
+app = FastAPI(title="Decent Decision", lifespan=lifespan,
+              docs_url=None, redoc_url=None, openapi_url=None)
 
 HERE = os.path.dirname(__file__)
 app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
@@ -193,7 +199,10 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+# C0 and C1 control characters (\x9b is a terminal escape on some consoles)
+# and the bidirectional overrides that make text display in a different
+# order than it is stored.
+CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
 
 
 def clean(text: str) -> str:
@@ -420,11 +429,25 @@ def client_ip(request: Request) -> str:
     nothing reaches this app except through that tunnel."""
     cf = request.headers.get("cf-connecting-ip")
     if cf:
-        return cf.strip()
+        return _ip_bucket(cf.strip())
     fwd = request.headers.get("x-forwarded-for", "")
     if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+        return _ip_bucket(fwd.split(",")[0].strip())
+    return _ip_bucket(request.client.host) if request.client else "unknown"
+
+
+def _ip_bucket(ip: str) -> str:
+    """One IPv6 home connection usually owns a whole /64 -- 2^64 addresses. Counted
+    one by one, every per-IP limit would be a formality. IPv4 stays as it is."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if addr.version == 6:
+        if addr.ipv4_mapped:
+            return str(addr.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False))
+    return str(addr)
 
 
 async def throttle_signup(request: Request) -> bool:
@@ -507,10 +530,15 @@ async def login_gate(request: Request, username: str) -> str | None:
     return None
 
 
-async def record_login_failure(request: Request, username: str) -> None:
+async def record_login_failure(request: Request, username: str) -> list:
+    """Count an attempt against both the address and the account. Returns the
+    rows written, so a login that turns out to be correct can take them back."""
+    rows = []
     for kind, value in (("ip", client_ip(request)), ("user", username)):
-        await q("INSERT INTO login_throttle (subject) VALUES (%s)",
-                (await _subject_hash(kind, value),))
+        rows.append(await q("INSERT INTO login_throttle (subject) VALUES (%s) "
+                            "RETURNING id",
+                            (await _subject_hash(kind, value),), one=True))
+    return [r["id"] for r in rows]
 
 
 async def create_user(username: str, email: str, password: str, note: str = ""):
@@ -518,7 +546,12 @@ async def create_user(username: str, email: str, password: str, note: str = ""):
     can sign in immediately and see their status, but cannot post or vote
     until an admin approves them and their agent slot is created."""
     username = username.strip()
-    email = email.strip().lower()
+    # A real, single address -- not "x <me@gmail.com>" or a comma list, which
+    # would reach one inbox under endlessly many "different" emails.
+    try:
+        email = validate_email(email.strip(), check_deliverability=False).normalized.lower()
+    except EmailNotValidError:
+        return None, msg("form_errors.bad_email")
 
     if not USERNAME_RE.match(username):
         return None, msg("form_errors.bad_username")
@@ -529,6 +562,7 @@ async def create_user(username: str, email: str, password: str, note: str = ""):
     if canonical.partition("@")[2] in DISPOSABLE:
         return None, msg("form_errors.disposable_email")
 
+    note = clean(note)[:1000]
     # Two separate uniqueness checks so the message can say which one clashed.
     if await q("SELECT 1 FROM users WHERE lower(username) = lower(%s)",
                (username,), one=True):
@@ -549,7 +583,8 @@ async def create_user(username: str, email: str, password: str, note: str = ""):
                               password_hash, note, status, is_admin)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id, username, status, is_admin""",
-        (email, canonical, username, username, auth.hash_password(password),
+        (email, canonical, username, username,
+         await run_in_threadpool(auth.hash_password, password),
          clean(note), "approved" if first else "pending", first), one=True)
 
     if first:
@@ -576,7 +611,8 @@ def send_mail(to: str, subject: str, body: str) -> None:
         mail["From"] = os.environ.get("SMTP_FROM", "noreply@decentdecision.com")
         mail["To"] = to
         mail.set_content(body)
-        with smtplib.SMTP(SMTP_HOST, int(os.environ.get("SMTP_PORT", 25))) as srv:
+        with smtplib.SMTP(SMTP_HOST, int(os.environ.get("SMTP_PORT", 25)),
+                          timeout=15) as srv:
             if os.environ.get("SMTP_USER"):
                 srv.starttls()
                 srv.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
@@ -677,7 +713,9 @@ async def approve_user(user_id: int, agent_name: str) -> bool:
 
 
 @app.post("/users/register", status_code=201)
-async def api_register(a: Registration):
+async def api_register(a: Registration, request: Request):
+    if await throttle_signup(request):
+        raise HTTPException(429, msg("form_errors.too_many_signups"))
     row, err = await create_user(a.username, a.email, a.password, a.note)
     if err:
         raise HTTPException(409, err)
@@ -738,6 +776,8 @@ async def approve(user_id: int, body: Approval):
 async def post_issue(i: IssueIn, user: dict = Depends(current_user)):
     if err := bad_title(i.title):
         raise HTTPException(422, err)
+    if await issue_flood(user["id"]):
+        raise HTTPException(429, msg("form_errors.issue_flood"))
     forum = await forum_by_slug(i.forum)
     if not forum:
         raise HTTPException(422, msg("errors.unknown_forum"))
@@ -762,7 +802,7 @@ async def open_issues(forum: str | None = None):
         LEFT JOIN forums f ON f.id = i.forum_id
             WHERE i.closes_at > now() AND i.removed_at IS NULL
               AND (%s::int[] IS NULL OR i.forum_id = ANY(%s::int[]))
-         ORDER BY i.created_at DESC""", (ids, ids))
+         ORDER BY i.created_at DESC LIMIT 500""", (ids, ids))
 
 
 @app.get("/agent/forums")
@@ -1212,8 +1252,12 @@ async def page_new_submit(request: Request, title: str = Form(...),
 
     if user["status"] != "approved":
         return await again(msg("form_errors.awaiting_approval"), 403)
+    if len(title) > MAX_TITLE or len(body) > MAX_BODY:
+        return await again(msg("form_errors.too_long", title=MAX_TITLE, body=MAX_BODY), 422)
     if err := bad_title(title):
         return await again(err, 422)
+    if await issue_flood(user["id"]):
+        return await again(msg("form_errors.issue_flood"), 429)
     chosen = await forum_by_slug(forum) if forum else None
     if not chosen:
         return await again(msg("form_errors.choose_forum"), 422)
@@ -1291,17 +1335,23 @@ async def page_login_submit(request: Request, username: str = Form(...),
         "SELECT id, password_hash FROM users WHERE lower(username) = lower(%s)",
         (username.strip(),), one=True)
 
-    if not row or not auth.verify_password(password, row["password_hash"]):
-        await record_login_failure(request, username)
+    # The attempt is counted before the check, so a burst of parallel guesses
+    # cannot all slip past the gate before any failure is recorded. A success
+    # clears the account's count again below.
+    attempt = await record_login_failure(request, username)
+    ok = row and await run_in_threadpool(auth.verify_password, password,
+                                         row["password_hash"])
+    if not ok:
         # Deliberately the same message either way: telling an attacker that a
         # username exists is a free gift.
         return render(request, "login.html", {
             "user": None, "next": next,
             "error": msg("form_errors.wrong_login")}, status_code=401)
 
+    await q("DELETE FROM login_throttle WHERE id = ANY(%s)", (attempt,))
     if auth.needs_rehash(row["password_hash"]):
         await q("UPDATE users SET password_hash = %s WHERE id = %s",
-                (auth.hash_password(password), row["id"]))
+                (await run_in_threadpool(auth.hash_password, password), row["id"]))
 
     # Only ever redirect within this site: "next" comes from the query string.
     dest = next if next.startswith("/") and not next.startswith("//") else "/account"
@@ -1331,6 +1381,9 @@ MAX_COMMENT = 5000
 # Nesting is unlimited in the data; only the indent stops, so a long argument
 # keeps its shape instead of being silently reparented.
 MAX_INDENT = 6
+MAX_DEPTH = 40            # replies to replies; past this, start a new thread
+MAX_TITLE, MAX_BODY = 200, 8000
+ISSUES_PER_DAY = int(os.environ.get("ISSUES_PER_DAY", "10"))
 COMMENTS_PER_5_MIN = int(os.environ.get("COMMENTS_PER_5_MIN", "10"))
 MAX_COMMENTS_RENDERED = 1000
 
@@ -1389,6 +1442,13 @@ async def post_comment(issue_id: int, author: dict, body: str,
     for person in await mentioned_users(body):
         await notify(person["id"], "mention", row["id"], issue_id, author["id"])
     return row["id"]
+
+
+async def issue_flood(user_id: int) -> bool:
+    row = await q("""SELECT count(*) AS n FROM issues
+                      WHERE author_id = %s AND created_at > now() - interval '1 day'""",
+                  (user_id,), one=True)
+    return row["n"] >= ISSUES_PER_DAY
 
 
 async def comment_flood(user_id: int) -> bool:
@@ -1500,6 +1560,8 @@ async def page_comment(request: Request, issue_id: int, body: str = Form(...),
             raise HTTPException(404, msg("errors.no_such_comment"))
         if parent["removed_at"]:
             raise HTTPException(409, msg("errors.comment_removed"))
+        if parent["depth"] >= MAX_DEPTH:
+            raise HTTPException(409, msg("errors.thread_too_deep"))
 
     new_id = await post_comment(issue_id, user, body, parent)
     return back_to(issue_id, new_id, sort)
@@ -1519,8 +1581,10 @@ async def page_reply_form(request: Request, comment_id: int,
     if not user:
         return RedirectResponse(f"/login?next=/c/{comment_id}/reply",
                                 status_code=303)
-    issue = await q("SELECT id, title FROM issues WHERE id = %s",
+    issue = await q("SELECT id, title FROM issues WHERE id = %s AND removed_at IS NULL",
                     (row["issue_id"],), one=True)
+    if not issue:
+        raise HTTPException(404, msg("errors.not_found"))
     return render(request, "comment_form.html",
                   {"user": user, "issue": issue, "parent": row,
                    "editing": None, "sort": sort, "error": None})
