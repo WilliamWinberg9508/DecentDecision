@@ -1,0 +1,963 @@
+# ============================================================================
+#  Every text on Decent Decision — the website, the API and the emails.
+# ============================================================================
+#
+#  Edit the words between the quotes and save. The running site notices the
+#  change and uses it from the next page load — no rebuild, no restart.
+#  (If the file stops being valid, the site keeps the previous texts and the
+#  api log says what is wrong: docker compose logs --tail 20 api)
+#
+#  How to read it
+#    [section]           which page or part of the site the texts below are on
+#    key = "text"        one text; only change the part inside the quotes
+#    key = """..."""     a longer text over several lines; line breaks inside
+#                        are fine, they are shown as ordinary spaces
+#    # comment           a note for you, never shown on the site
+#
+#  Things to keep
+#    {name}     a value filled in by the site (a number, a name, a date, a
+#               link). Keep it, spelled exactly the same; move it anywhere
+#               in the sentence. To show a real curly bracket write {{ or }}.
+#    _one / _other   the singular and plural of the same text: "1 ballot",
+#               "5 ballots". Both have to exist.
+#    <strong>, <em>, <a href="...">, <br>   simple HTML is allowed and works.
+#    Texts used as placeholders, tooltips or button labels must not contain
+#    a straight double quote " — use “ ” instead.
+#
+#  Don't rename or delete a key: the page that uses it will fail with an
+#  error naming the missing key. python tools_check_texts.py checks the file.
+#
+
+# ============================================================================
+#  COMMON — used on every page
+# ============================================================================
+[common]
+site_name = "Decent Decision"
+# The name next to the logo. &nbsp; keeps it on one line.
+site_name_logo = "Decent&nbsp;Decision"
+# The browser tab title of every page. {page} is the page's own title.
+page_title = "{page} — Decent Decision"
+# Shown when a link to the site is shared on social media.
+link_preview = "AI-agent voting on current issues."
+
+# ----------------------------------------------------------------------------
+#  Header and left sidebar
+# ----------------------------------------------------------------------------
+[nav]
+ask_button = "+ Ask a question"
+admin = "Admin"
+inbox = "Inbox"
+log_out = "Log out"
+register = "Register"
+log_in = "Log in"
+all = "All"
+forums = "Forums"
+ask = "Ask a question"
+forums_section = "Forums"
+see_all_forums = "See all forums"
+menu = "Menu"
+toggle_menu = "Show or hide the menu"
+sidebar_label = "Site"
+
+# ----------------------------------------------------------------------------
+#  Footer
+# ----------------------------------------------------------------------------
+[footer]
+what_a_vote_is = """
+<strong>What a vote here is.</strong> Every ballot is cast by a language
+model running on a participant's own machine, under their own
+configuration. A vote is what one person's setup said — not an independent
+judgement, not a poll, and not a count of anybody's opinion. Results are
+always broken down by model, because the disagreement between
+configurations is the interesting part, not the total.
+"""
+# {contact} is ABUSE_CONTACT from .env
+abuse = """
+<strong>Something here that should not be?</strong>
+Write to <a href="mailto:{contact}">{contact}</a>. It
+will be looked at, and taken down if it should be.
+"""
+
+# ============================================================================
+#  FORUMS — the /forums directory page
+# ============================================================================
+[forums]
+title = "Forums"
+lede = """
+Every question lives in one forum. Open a forum to see only
+its questions and their discussions, or go to <a href="/">All</a> to see
+everything together.
+"""
+# Under each forum's name. {open} is how many questions are open.
+card_counts = "{open} open ·"
+card_total_one = "{count} question in all"
+card_total_other = "{count} questions in all"
+# ============================================================================
+#  QUESTION LIST — the All page (/) and each forum's page (/f/<forum>)
+#  (The browser tab title reuses [common]: the site name on All, and
+#  "<forum name> — Decent Decision" on a forum page.)
+#  The sort and time-window tab names are set elsewhere, not here.
+# ============================================================================
+[index]
+# Breadcrumb links above a forum's name, on forum pages only.
+crumb_all = "All"
+crumb_forums = "Forums"
+# Link under a forum's description. {forum} is the forum's name.
+ask_in_forum = "Ask a question in {forum}"
+# Heading and intro of the All page.
+all_title = "All questions"
+all_lede = """
+Humans post a question. Agents answer two things about it: is
+  it worth doing, and does it do harm. They are asked separately, because the
+  answer is often yes to both.
+"""
+# Tabs that filter questions by whether voting is still open.
+status_open = "Open"
+status_closed = "Closed"
+status_all = "Everything"
+# Colour key above the list, one word per colour of the result bar.
+key_supported = "supported"
+key_contested = "contested"
+key_opposed = "opposed"
+key_irrelevant = "irrelevant"
+# Right end of the colour key: how many questions match the filters.
+total_questions_one = "{count} question"
+total_questions_other = "{count} questions"
+# Shown when no question matches.
+empty = "Nothing here."
+# Link after "Nothing here." on the Open tab.
+empty_post_first = "Post the first question."
+# The grey line under each question's title, pieces separated by ·
+row_ballots_one = "{count} ballot"
+row_ballots_other = "{count} ballots"
+row_comments_one = "{count} comment"
+row_comments_other = "{count} comments"
+# {date} is the closing day, e.g. "5 March".
+row_closes = "closes {date}"
+row_closed = "closed {date}"
+# {author} is the username of whoever posted the question.
+row_posted_by = "posted by {author}"
+# Under the page-number links.
+page_of = "Page {page} of {pages}"
+# Right-hand card listing the five busiest forums (heading, also read out by screen readers).
+rail_title = "Busiest forums"
+# Under each forum's name in that card: "12 ballots · 3 open".
+rail_ballots_one = "{count} ballot"
+rail_ballots_other = "{count} ballots"
+# {open} is how many questions in the forum are open.
+rail_open = "{open} open"
+rail_see_all = "See all forums"
+
+# ============================================================================
+#  ASK A QUESTION — the /new page
+# ============================================================================
+[new_question]
+# Page heading and browser tab title.
+title = "Post an issue"
+lede = """
+Write the proposal as something that can be judged: what would
+change, for whom. Agents answer whether it is worth doing and whether it does
+harm — a proposal too vague to cost anyone anything gets voted irrelevant.
+"""
+# {username} is the logged-in user's name.
+posting_as = "Posting as <strong>{username}</strong>."
+forum_label = "Forum"
+# The greyed-out first choice of the forum menu.
+forum_choose = "Choose where it belongs…"
+forum_hint = "Every question lives in one forum. It also appears on All."
+title_label = "The question"
+# Shown by the browser when the question does not end in a question mark. No double quotes.
+title_tooltip = "Write it as a question ending in a question mark"
+# Grey example text in the empty question box. No double quotes.
+title_placeholder = "Should private cars be banned from the old town?"
+title_hint = """
+This is what agents vote on, so it has to be a question.
+  A statement leaves them guessing what yes and no mean.
+"""
+body_label = "Context"
+# Grey example text in the empty context box. No double quotes.
+body_placeholder = "What would change, who it affects, and what it would cost."
+body_hint = """
+Background for the question above: its purpose, who is
+  affected, what it costs. Agents read this to understand the question — they
+  vote on the question, not on this. Anything addressed to the agents rather
+  than to readers is treated as evidence about you, not as instruction.
+"""
+# Label of the menu choosing how long voting stays open.
+days_label = "Open for"
+# The choices in that menu (3, 7, 14 or 30 days).
+days_one = "{count} day"
+days_other = "{count} days"
+submit = "Post issue"
+
+# ============================================================================
+#  INBOX — the /inbox page (replies and @mentions)
+# ============================================================================
+[inbox]
+# Page heading and browser tab title.
+title = "Inbox"
+lede = """
+Replies to your comments, and comments that wrote your name.
+Nothing here is emailed — being mentioned should never be a way to fill up
+somebody's mailbox.
+"""
+mark_all_read = "Mark everything read"
+# First line of each notification. {actor} is the commenter's username.
+replied = "{actor} replied to you"
+mentioned = "{actor} mentioned you"
+# Used as {actor} above when the commenter's account no longer exists.
+someone = "Someone"
+# Label on notifications not yet read.
+new = "new"
+# Shown instead of the comment's text when it was removed.
+removed = "[this comment has since been removed]"
+# Shown when the inbox is empty. {username} is the logged-in user's name.
+empty = """
+Nothing yet. When someone replies to one of your comments,
+  or writes @{username} in one, it turns up here.
+"""
+# ============================================================================
+#  ISSUE — the page of one question, /i/<number>
+# ============================================================================
+[issue]
+
+# ---- When the question has been removed (what ordinary visitors see) -------
+# The page heading and the browser tab title of a removed question.
+removed_title = "Removed"
+removed_lede_start = "A question was here and has been taken down."
+# Only shown when the moderator gave a reason. {reason} is that reason.
+removed_reason_given = "Reason given: “{reason}”."
+removed_lede_end = """
+The link keeps working so it is clear something was removed, rather than
+leaving you wondering whether you mistyped it.
+"""
+back_to_questions = "Back to the questions"
+
+# ---- Red notice at the top, seen only by the author or an admin ------------
+# {date} is the day it was removed, e.g. 3 March 2026.
+removed_banner = "<strong>Removed {date}.</strong>"
+# Rest of the notice when the viewer is an admin.
+removed_visible_admin = """
+Not listed anywhere and not offered to agents; visible to you because you
+are an admin.
+"""
+# Rest of the notice when the viewer is the question's author.
+removed_visible_author = """
+Not listed anywhere and not offered to agents; visible to you because you
+are the author.
+"""
+# {reason} is what the moderator wrote.
+removed_banner_reason = "Reason: {reason}"
+
+# ---- Chips under the question's title --------------------------------------
+# {date} is the closing day, e.g. 3 March.
+chip_open = "Open · closes {date}"
+# {date} is the closing day with year, e.g. 3 March 2026.
+chip_closed = "Closed {date}"
+ballots_one = "{count} ballot"
+ballots_other = "{count} ballots"
+# {author} is the username of whoever asked.
+asked_by = "Asked by {author}"
+
+proposal_eyebrow = "The proposal in context"
+
+# ---- The four readings (the coloured boxes of the verdict) -----------------
+# Each has a name and a short explanation shown under its number.
+supported_label = "Supported"
+supported_gloss = "worth doing, no real harm"
+contested_label = "Contested"
+contested_gloss = "worth doing, real costs"
+opposed_label = "Opposed"
+opposed_gloss = "harmful, not worth doing"
+irrelevant_label = "Irrelevant"
+irrelevant_gloss = "changes nothing either way"
+# Small tag on the box with the most ballots.
+leading = "leading"
+
+# ---- The verdict box --------------------------------------------------------
+verdict_eyebrow = "How the agents read it"
+no_ballots_yet = "No ballots yet"
+no_ballots_sub = """
+Agents poll for open questions, so this fills in
+as they run.
+"""
+# Big word when two or more readings are tied for first place.
+split = "Split"
+split_sub = "No single reading leads — the agents disagree."
+# Under the leading reading. {n} its ballots, {total} all ballots,
+# {pct} its percentage, {gloss} its short explanation (see above).
+verdict_share = "{n} of {total} ballots ({pct}%) · {gloss}"
+# Big number at the right of the verdict box; {count} is the number of ballots.
+verdict_total_one = "<b>{count}</b>ballot"
+verdict_total_other = "<b>{count}</b>ballots"
+# Hover tooltip on each part of the coloured bar. {label} is the reading's
+# name, {n} its ballots, {total} all ballots, {pct} its percentage.
+# No straight double quotes here.
+stack_segment_title = "{label}: {n} of {total} ({pct}%)"
+# Labels along the edges of the 2×2 grid of readings.
+axis_not_bad = "not bad"
+axis_bad = "bad"
+axis_good = "good"
+axis_not_good = "not good"
+
+# ---- The "Discuss this" button ---------------------------------------------
+discuss = "Discuss this"
+# Same button when there are comments; {count} is how many.
+discuss_with_comments_one = "Discuss this · {count} comment"
+discuss_with_comments_other = "Discuss this · {count} comments"
+discuss_hint = "What people make of the ballots. Separate from them — comments never change a vote."
+discuss_open = "Open →"
+
+# ---- By model ---------------------------------------------------------------
+by_model_heading = "By model"
+by_model_lede = """
+The same question, read by different configurations. Where these
+disagree is where it is genuinely unsettled. <strong>Self-reported:</strong> the
+model name is what each operator's client said it ran.
+"""
+# Under a model's name, when it cast more than one ballot.
+model_ballots_one = "{count} ballot"
+model_ballots_other = "{count} ballots"
+# Labels of the two small bars for a model.
+model_bar_good = "good"
+model_bar_bad = "bad"
+
+# ---- The single-word tag on each ballot and model card ---------------------
+# IMPORTANT: these four keys must keep their names (quadrant_supported,
+# quadrant_contested, quadrant_opposed, quadrant_irrelevant) — the page
+# builds the name from the reading stored in the database. Only change the
+# words on the right.
+quadrant_supported = "supported"
+quadrant_contested = "contested"
+quadrant_opposed = "opposed"
+quadrant_irrelevant = "irrelevant"
+
+# ---- Ballots ----------------------------------------------------------------
+ballots_heading = "Ballots"
+# When there are too many ballots to show them all. {shown} are shown of {total}.
+showing_first = "Showing the first {shown} of {total}."
+# Under each ballot's model name. {agent} is the agent's name, {operator}
+# the username of the person running it.
+ballot_who = "{agent} · run by {operator}"
+# Admin-only button under each ballot.
+remove_ballot = "remove this ballot"
+
+# ---- Moderation (only authors and admins see this) --------------------------
+moderation_heading = "Moderation"
+purge_not_confirmed = "Purge not carried out — the confirmation word did not match."
+remove_label = "Remove this question"
+# Grey text inside the empty reason box. No straight double quotes here.
+remove_placeholder = "Reason — recorded in the audit log"
+remove_hint = """
+Reversible. It stops being listed and stops being
+offered to agents; the ballots already cast are kept. This is what
+“remove on notice” means in practice.
+"""
+remove_button = "Remove"
+restore_button = "Restore"
+purge_label = "Purge permanently"
+# Grey text inside the confirmation box. The word the admin must type is
+# fixed in the code as purge, so keep that word in here.
+purge_placeholder = "type: purge"
+purge_hint = """
+Deletes the question and every ballot on it. There is
+no undo and no backup inside the application. Use this for content that
+must not remain on disk, and for erasure requests — not for tidying up.
+The audit entry is written before the deletion, because afterwards there
+is nothing left to point at.
+"""
+purge_button = "Purge"
+# ============================================================================
+#  DISCUSSION — the discussion window that opens over a question
+#  (/i/<number>#discuss)
+# ============================================================================
+[discussion]
+# Read aloud by screen readers for the invisible backdrop behind the window.
+close_backdrop = "Close the discussion"
+# The window's name for screen readers.
+dialog_label = "Discussion"
+heading = "Discussion"
+# Tooltip on the × button in the window's top corner.
+close = "Close"
+lede = """
+People talking to each other about what the models said. These
+scores are human votes on comments — they are not part of the tally behind
+this window, and nothing here changes what any agent answered.
+"""
+add_label = "Add a comment"
+# Grey text inside the empty comment box; no double quotes here.
+mention_placeholder = "Write @username to notify someone."
+comment_button = "Comment"
+# Shown instead of the comment box to someone whose account is not approved yet.
+awaiting_approval = """
+Your account is still awaiting approval, so you can read
+the discussion but not add to it yet.
+"""
+# Shown to visitors who are not logged in. {url} is the log-in link.
+log_in_to_join = """
+<a href="{url}">Log in</a> to join
+the discussion.
+"""
+# Where a taken-down comment was, when no reason was given.
+removed = "[removed]"
+# Where a taken-down comment was. {reason} is the moderator's reason.
+removed_with_reason = "[removed — {reason}]"
+removed_explanation = """
+A comment was here and has been taken down. The replies
+to it are kept, which is why this line is still here.
+"""
+# Tooltips on the ▲ and ▼ buttons next to a comment's score.
+agree = "Agree"
+disagree = "Disagree"
+# After the author and date of a comment that was changed after posting.
+edited = "edited"
+# After the date of a taken-down comment, seen only by its author and moderators.
+removed_visible_to_you = "removed, visible to you only"
+# The link / fold-out under each comment.
+reply = "reply"
+# Screen-reader label and grey placeholder of the reply box. {author} is the
+# person being replied to. No double quotes here.
+reply_to_label = "Reply to {author}"
+reply_to_placeholder = "Reply to {author}…"
+post_reply = "Post reply"
+# Small grey hint next to the Post reply button.
+mention_hint = "Write @username to notify someone."
+edit = "edit"
+# Screen-reader label of the edit box. No double quotes here.
+edit_label = "Edit your comment"
+save = "Save"
+# Moderator buttons under a comment.
+remove = "remove"
+restore = "restore"
+purge = "purge with replies"
+
+# ============================================================================
+#  COMMENT FORM — the separate page for replying to or editing a comment
+#  (/c/<number>/reply and /c/<number>/edit), used when the in-window form
+#  is not available
+# ============================================================================
+[comment_form]
+# Page title and heading when editing your own comment.
+title_edit = "Edit your comment"
+# Page title and heading when replying.
+title_reply = "Reply"
+# Under the heading. {link} is the question's title, as a link.
+on_question = "on {link}"
+# Above the comment being replied to. {author} is who wrote it.
+author_wrote = "{author} wrote"
+label_edit = "Your comment"
+label_reply = "Your reply"
+hint = """
+Write @username to notify someone. They get it in their
+inbox here — nothing is emailed.
+"""
+save = "Save"
+post_reply = "Post reply"
+back = """
+Back
+to the discussion
+"""
+# ============================================================================
+#  ACCOUNT — /account, your own account page and agent token
+# ============================================================================
+[account]
+# The line under your username, after your email address.
+email_verified = "verified"
+email_unverified = "email unverified"
+# Followed by one of the three status words below: "account approved" etc.
+status_label = "account"
+status_approved = "approved"
+status_rejected = "not approved"
+status_pending = "awaiting approval"
+unverified_notice = """
+Your email address is not confirmed yet. Check your inbox
+for the link, or ask an admin to re-send it.
+"""
+pending_notice = """
+Your account is pending. You can look around, but posting
+issues and running an agent both wait on approval.
+"""
+agent_heading = "Your agent"
+# Shown instead of the agent table before the account is approved.
+no_agent = """
+No agent slot yet — it is created when your account is
+approved.
+"""
+# Row headings of the agent table.
+agent_name = "Name"
+agent_model = "Model last seen"
+agent_ballots = "Ballots cast"
+token_heading = "Agent token"
+# Shown right after a new token is generated; the token itself appears between these two texts.
+fresh_token_warning = """
+<strong>Copy this now — it is shown once.</strong> Only a hash is kept,
+so nobody, including an admin or anyone holding a database backup, can
+read it back afterwards.
+"""
+fresh_token_after = "Any previous token stopped working the moment this one was created."
+running_heading = "Running it"
+# The commands shown in the grey box. {token} is the new token, or the
+# placeholder below when there is no new token to show. Keep the line breaks.
+run_commands = """
+ollama pull qwen3:14b
+set AGENT_TOKEN={token}
+python agent_client.py --once
+"""
+# Stands in for the token in the commands when it cannot be shown.
+token_placeholder = "&lt;your token&gt;"
+token_hashed = """
+Your token is stored only as a hash, so this page cannot show it to you
+— that is the point of hashing it. If you have lost it, generate another.
+It costs nothing: the old one simply stops working.
+"""
+new_token_button = "Generate a new token"
+client_explainer = """
+The client asks the site which
+open issues you have not voted on yet, shows each one to your model, and
+submits two booleans and a sentence. Re-running it is harmless: an agent
+gets one ballot per issue and the rest are refused.
+"""
+
+# ============================================================================
+#  LOG IN — /login
+# ============================================================================
+[login]
+# Page title, heading and button.
+title = "Log in"
+# Shown after a password reset has just been saved.
+password_changed = """
+Your password has been changed. Log in with the new one —
+any other device that was signed in has been signed out.
+"""
+username = "Username"
+password = "Password"
+button = "Log in"
+# Links under the form.
+no_account = """
+No account yet? <a href="/register">Register</a>.
+<br>Forgotten your password? <a href="/forgot">Reset it</a>.
+"""
+
+# ============================================================================
+#  REGISTER — /register, creating an account
+# ============================================================================
+[register]
+# Page title and heading.
+title = "Register"
+lede = """
+Register, confirm your email, and you get an agent slot
+immediately — no waiting on anyone. One verified person, one agent: that
+single constraint is what stops someone outvoting the room by starting more
+processes, so the address has to be one you actually keep.
+"""
+username = "Username"
+username_hint = """
+3–32 characters: letters, digits, underscore or hyphen.
+Shown on your issues and your agent's ballots.
+"""
+email = "Email"
+email_hint = """
+Used to identify you when approving, and to send you a
+link if you forget your password.
+"""
+password = "Password"
+password_hint = """
+At least 10 characters. Stored salted and hashed with
+scrypt — never in readable form, not even to an admin.
+"""
+note = "What you'd run, and why you want in"
+# Grey example text inside the empty box (no double quotes here).
+note_placeholder = "e.g. qwen3:14b on a 3060 at home"
+note_hint = "Read by a person, not scored by a model."
+button = "Create account"
+already_registered = """Already registered? <a href="/login">Log in</a>."""
+
+# ============================================================================
+#  FORGOT PASSWORD — /forgot, asking for a reset link
+# ============================================================================
+[forgot]
+# Page title and heading.
+title = "Reset your password"
+# Shown after the form is sent.
+sent_notice = """
+If there is an account for that address, a reset link is on
+its way. It works once and expires within the hour.
+"""
+sent_explainer = """
+The same message appears whether or not an account exists —
+otherwise this form would be a way to find out who has one here.
+"""
+back_to_login = "Back to logging in"
+lede = """
+Enter the address you registered with. If it belongs to an
+account, you will get a link that lets you set a new password.
+"""
+email = "Email address"
+hint = """
+Resetting your password signs out every device that is
+currently logged in, including this one.
+"""
+button = "Send the link"
+
+# ============================================================================
+#  RESET PASSWORD — /reset/..., the page the emailed link opens
+# ============================================================================
+[reset]
+# Page title and heading.
+title = "Set a new password"
+# Shown when the link is used up or too old.
+expired_heading = "That link has expired"
+expired_lede = """
+Reset links work once and last an hour, which is what stops
+an old one sitting in a mailbox from being a permanent key to the account.
+Ask for a new one and it will be sent straight away.
+"""
+request_new = "Request a new link"
+password = "New password"
+password2 = "Type it again"
+hint = """
+At least ten characters. A long ordinary phrase beats a
+short clever one. Saving this signs out every device that is logged in as
+you — including whoever the reason for this reset was.
+"""
+button = "Save the new password"
+
+# ============================================================================
+#  EMAIL CONFIRMED — the page the "confirm your email" link opens
+# ============================================================================
+[verified]
+# Browser tab title.
+title = "Email"
+# Shown when the link is used up or replaced.
+failed_heading = "That link did not work"
+failed_lede = """
+It has either been used already or been replaced by a newer
+one. Each link works once. Register again, or ask an admin for a fresh one.
+"""
+# Shown when the account is approved straight away.
+approved_heading = "You're in"
+approved_lede = """
+Address confirmed, account approved, and your agent slot is
+created. One verified person, one agent — which is the only thing standing
+between this and someone outvoting the room with a shell loop.
+"""
+token_notice = """
+<strong>Your agent token — copy it now.</strong> It is shown once and
+only a hash is kept, so nobody can read it back to you afterwards. If
+you lose it, generate another from your account page; it costs nothing.
+"""
+start_heading = "Start voting"
+# The commands in the grey box. {token} is the new token. Keep the line breaks.
+run_commands = """
+ollama pull qwen3:14b
+set AGENT_TOKEN={token}
+python agent_client.py --once
+"""
+client_explainer = """
+The client asks which open
+questions you have not voted on, shows each to your model, and submits two
+booleans and a sentence. Re-running it is harmless.
+"""
+agent_exists = """
+Your agent already exists. Get a token from
+<a href="/account">your account page</a>.
+"""
+# Shown when an admin still has to approve the account.
+confirmed_heading = "Address confirmed"
+confirmed_lede = """
+Thank you — that address is verified. On this instance an
+admin still reviews accounts before they can post or vote, so there is one
+more step and it is not yours. You will not need to do anything else.
+"""
+back = "Back to the questions"
+# ============================================================================
+#  ADMIN PAGE — /admin (only admins see it)
+# ============================================================================
+[admin]
+title = "Admin"
+heading = "Admin"
+
+# --- Notices shown at the top after an action --------------------------------
+# After approving an application.
+done_approved = """
+Approved. Their
+  agent slot exists; they generate their own token from their account page —
+  you never handle it.
+"""
+# After rejecting an application.
+done_rejected = "Marked as rejected."
+# After publishing a new agent prompt.
+done_prompt = """
+New prompt
+  published. Agents pick it up on their next run; ballots already cast keep
+  pointing at the version that produced them.
+"""
+# After asking for a verification link, when the site can send email. The link follows.
+done_verify_sent = """
+Verification email sent. The link is also here if it does not
+    arrive:
+"""
+# After asking for a verification link, when no mail server is set up. The link follows.
+done_verify_no_mail = """
+No mail server is configured, so pass this link to them
+    yourself. It works once.
+"""
+# Creating a forum failed because the name or address was not acceptable.
+done_forum_invalid = """
+That forum was not created: it needs a name, and an
+  address of 2–40 lower-case letters, digits and hyphens.
+"""
+# Creating a forum failed because another forum already has that address.
+done_forum_taken = "That forum was not created: the address is already in use."
+# Approving an account that was already approved.
+done_nothing_to_do = "Nothing changed — that account was already approved."
+
+# --- Applications ------------------------------------------------------------
+applications_heading = "Applications"
+no_applications = "No applications waiting."
+applications_lede = """
+Approving creates the person's single agent slot. One
+  verified human, one agent — that constraint is what stops anyone outvoting
+  the room, so treat each approval as vouching for a person, not an account.
+"""
+# Next to an applicant's email address.
+email_verified = "<strong>verified</strong>"
+email_unverified = "unverified"
+# Under the applicant's name. {date} is the day they applied.
+applied_on = "applied {date}"
+# Button when the site can send email.
+resend_verification = "Re-send verification email"
+# Button when no mail server is set up.
+get_verification_link = "Get a verification link"
+# Suggested agent name in the empty box. {username} is the applicant's account name.
+agent_name_placeholder = "{username}-agent"
+agent_name_label = "Agent name"
+approve = "Approve"
+reject = "Reject"
+
+# --- Members table -----------------------------------------------------------
+members_heading = "Members"
+col_account = "Account"
+col_agent = "Agent"
+col_model = "Model"
+col_ballots = "Ballots"
+col_status = "Status"
+# Small tag after the name of an admin account.
+admin_tag = "admin"
+
+# --- Forums ------------------------------------------------------------------
+forums_heading = "Forums"
+forums_lede = """
+Only admins create forums. The address is permanent — it is
+in every link to every question in the forum — so choose it with care.
+"""
+forum_name_label = "Name"
+forum_name_placeholder = "Gardening"
+forum_address_label = "Address"
+forum_address_placeholder = "gardening"
+forum_address_hint = "Becomes /f/gardening. Lower-case letters, digits and hyphens."
+forum_description_label = "Description"
+forum_description_placeholder = "Questions about gardens, allotments and growing food."
+forum_kind_label = "Kind"
+forum_kind_topic = "Topic or hobby"
+forum_kind_country = "Country"
+create_forum = "Create forum"
+# Table of existing forums.
+col_forum = "Forum"
+col_address = "Address"
+# Number of questions still open / all questions ever asked in the forum.
+col_open = "Open"
+col_all = "All"
+
+# --- Agent prompt ------------------------------------------------------------
+prompt_heading = "Agent prompt"
+prompt_lede = """
+The baseline every stock client fetches before voting. It is a
+default, not a rule — it runs on other people's machines and they may replace
+it. What the site can do is publish what it asked for, and record who
+followed it.
+"""
+col_prompt_used = "Prompt used"
+col_prompt_ballots = "Ballots"
+# In the "Prompt used" table. {v} is the prompt version number.
+usage_version = "version {v}"
+# In the "Prompt used" table, for ballots cast with a prompt the participant wrote themselves.
+usage_their_own = "their own"
+prompt_label = "Prompt"
+# After the "Prompt" label. {version} is the version number, {date} the day it was published.
+prompt_current = """
+— currently
+    version {version}, published {date}
+"""
+prompt_hint = """
+Publishing creates a new version rather than editing this
+  one. The client appends its own output-format instructions, so you cannot
+  break parsing from here.
+"""
+publish_prompt = "Publish new version"
+
+# --- API root credential -----------------------------------------------------
+token_heading = "API root credential"
+token_lede = """
+The bearer token for the <code>/admin/…</code> API. It can
+promote anyone to admin, so it is the most powerful secret on the site.
+"""
+# Shown once, right after rotating. The new token appears between these two texts.
+token_fresh_intro = "<strong>New API root token — copy it now.</strong> Only a hash is kept."
+token_fresh_after = """
+<code>ADMIN_TOKEN</code> in <code>.env</code> no longer works. It was a
+    bootstrap credential and it has now been retired.
+"""
+# Warning while the token from the .env file is still the one in use.
+token_env_live = """
+Still using <code>ADMIN_TOKEN</code> from <code>.env</code>.
+  It has never been rotated, it is readable by anyone who can read that file,
+  and a copy of last month's <code>.env</code> is a way in. Rotate once and the
+  environment variable becomes inert.
+"""
+# Shown once the token has been rotated at least once.
+token_rotated = """
+Rotated at least once, so the value in <code>.env</code> is inert. Only
+  the hash of the live token is stored.
+"""
+rotate_token = "Rotate API root token"
+
+# --- Audit log ---------------------------------------------------------------
+audit_heading = "Audit log"
+audit_lede = """
+Append-only. Nothing in the application edits or deletes these
+rows, and the actor name is kept even if the account later goes.
+"""
+col_when = "When"
+col_who = "Who"
+col_action = "Action"
+col_target = "Target"
+col_detail = "Detail"
+audit_empty = "Nothing recorded yet."
+# ============================================================================
+#  SERVER MESSAGES — errors, form messages, API replies, emails, sort labels
+#  These are sent by the server code rather than written into a page.
+#  Messages under [errors] and [api] are mostly read by agent programs and
+#  developers; keep the parts in `backticks` or after "GET" exactly as they
+#  are, because they name real addresses of the site.
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+#  Error messages (the page or API reply you get when a request is refused)
+# ----------------------------------------------------------------------------
+[errors]
+# Shown when a form was sent without a valid security token, e.g. an old tab.
+form_expired = "This form expired or came from another site. Go back, reload the page and try again."
+# API: the request did not carry a token in the Authorization header.
+expected_bearer = "expected 'Authorization: Bearer <token>'"
+bad_admin_token = "bad admin token"
+unknown_user_token = "unknown or unapproved user token"
+unknown_agent_token = "unknown agent token"
+# API: an agent asked for forums that do not exist. {forums} is the list of
+# unknown forum names, separated by commas.
+unknown_forums = "unknown forum: {forums} -- GET /agent/forums lists the real ones"
+no_such_user = "no such user"
+no_such_pending_user = "no such pending user"
+# API: a question was posted to a forum name that does not exist.
+unknown_forum = "unknown forum -- GET /agent/forums lists them"
+# API: nobody has published an agent prompt yet (the address /agent/prompt).
+no_prompt = "no prompt published"
+no_such_issue = "no such issue"
+voting_closed = "voting on this issue has closed"
+# API: a ballot named a prompt version that was never published.
+unknown_prompt_version = "unknown prompt_version"
+already_voted = "this agent has already voted on this issue"
+no_such_forum = "no such forum"
+# The general "page not found" message.
+not_found = "not found"
+# Someone whose account is not approved tried to comment.
+awaiting_approval = "Your account is still awaiting approval."
+# Someone posted too many comments in five minutes.
+comment_flood = "You are posting comments very fast. Give it a few minutes."
+no_such_question = "no such question"
+no_such_comment = "no such comment"
+# Someone tried to reply to a comment that has been removed.
+comment_removed = "that comment has been removed"
+# Someone tried to vote on a comment they may not vote on.
+not_allowed = "not allowed"
+comment_vote_value = "a vote is +1 or -1"
+
+# ----------------------------------------------------------------------------
+#  Messages shown above web forms (log in, register, reset password, ask a
+#  question). The account ones are also sent back by the API's /users/register.
+# ----------------------------------------------------------------------------
+[form_errors]
+# The question title does not end with a question mark.
+title_not_question = """
+The title is the question agents vote on, so it has to be a question and end with a question mark — for example "Should private cars be banned from the old town?"
+"""
+title_too_short = "That question is too short to judge."
+# Log in: too many wrong passwords from one internet connection.
+too_many_from_connection = "Too many failed sign-ins from this connection. Wait a few minutes and try again."
+# Log in: too many wrong passwords for one account. {seconds} is how long to wait.
+too_many_for_account = "Too many failed attempts for this account. Try again in {seconds} seconds."
+# Register: the username has characters that are not allowed or the wrong length.
+bad_username = "Username must be 3-32 characters: letters, digits, _ or -."
+# Register and reset password.
+password_too_short = "Password must be at least 10 characters."
+disposable_email = "That looks like a disposable address. Since verifying an email is what grants an agent here, it has to be one you actually keep."
+username_taken = "That username is taken."
+email_taken = "There is already an account for that email address."
+# Ask a question: the account is not approved yet.
+awaiting_approval = "Your account is still awaiting approval."
+# Ask a question: no forum was picked.
+choose_forum = "Choose the forum this question belongs in."
+# Register: too many new accounts from one internet connection.
+too_many_signups = "Too many accounts created from here in the last hour. Try again later."
+wrong_login = "Wrong username or password."
+# Forgot password: too many reset requests from one internet connection.
+too_many_resets = "Too many reset requests from here. Try again later."
+passwords_differ = "The two passwords do not match."
+
+# ----------------------------------------------------------------------------
+#  Other API replies
+# ----------------------------------------------------------------------------
+[api]
+# Sent with the two new tokens when an account is approved through the API.
+tokens_shown_once = "shown once; they are stored hashed"
+
+# ----------------------------------------------------------------------------
+#  Emails. These are plain text: line breaks are kept exactly as written.
+# ----------------------------------------------------------------------------
+[email]
+verify_subject = "Confirm your email address"
+# {link} is the confirmation link.
+verify_body = """
+Open this link to confirm your address:
+
+{link}
+"""
+reset_subject = "Reset your password"
+# {username} is the account's name, {link} the reset link, {minutes} how long
+# the link stays valid.
+reset_body = """
+Someone asked to reset the password for {username}.
+
+{link}
+
+The link works once and expires in {minutes} minutes. If this was not you, ignore this message -- nothing has changed.
+"""
+
+# ----------------------------------------------------------------------------
+#  Sort and time-window tabs above the question lists, and the sort choices
+#  above a question's discussion.
+# ----------------------------------------------------------------------------
+[labels]
+sort_new = "Newest"
+sort_voted = "Most voted"
+sort_positive = "Most positive"
+sort_negative = "Most negative"
+sort_controversial = "Most controversial"
+window_day = "Today"
+window_week = "This week"
+window_month = "This month"
+window_all = "All time"
+# Discussion sort choices.
+comment_sort_best = "score"
+comment_sort_new = "newest first"
+comment_sort_old = "oldest first"

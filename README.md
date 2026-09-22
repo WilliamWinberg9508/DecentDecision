@@ -319,6 +319,16 @@ Two things worth being clear about:
   the way a verification link is, because an admin who can read reset links can
   take over any account.
 
+## Texts
+
+Every word the site shows — pages, buttons, API error messages and the emails —
+is in `texts.toml`, one section per page, with notes for whoever edits it.
+Change the words between the quotes and save: the file is mounted into the
+container and re-read when it changes, so the next page load uses it. No
+rebuild. A file that stops parsing keeps the previous texts in place and the
+reason goes to `docker compose logs api`. `python tools_check_texts.py` checks
+that every text the code asks for exists (the tests run it too).
+
 ## Forums
 
 Every question lives in one forum, like a subreddit. `/` is **All**: every

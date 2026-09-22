@@ -1,36 +1,37 @@
 {% extends "base.html" %}
 {# If the title is the reason it was removed, the page title must not serve it
    either — the tab, the browser history and any link preview all read this. #}
-{% block title %}{% if removed and not may_see %}Removed{% else %}{{ issue.title }}{% endif %} — Decent Decision{% endblock %}
+{% block title %}{% if removed and not may_see %}{{ t("common.page_title", page=t("issue.removed_title")) }}{% else %}{{ t("common.page_title", page=issue.title) }}{% endif %}{% endblock %}
 {% block content %}
 
 {% if removed and not may_see %}
-  <h1>Removed</h1>
-  <p class="lede">A question was here and has been taken down.
-    {% if issue.removed_reason %}Reason given: “{{ issue.removed_reason }}”.{% endif %}
-    The link keeps working so it is clear something was removed, rather than
-    leaving you wondering whether you mistyped it.</p>
-  <p><a href="/">Back to the questions</a></p>
+  <h1>{{ t("issue.removed_title") }}</h1>
+  <p class="lede">{{ t("issue.removed_lede_start") }}
+    {% if issue.removed_reason %}{{ t("issue.removed_reason_given", reason=issue.removed_reason) }}{% endif %}
+    {{ t("issue.removed_lede_end") }}</p>
+  <p><a href="/">{{ t("issue.back_to_questions") }}</a></p>
 {% else %}
 
 {% if removed %}
   <p class="notice" style="border-left-color: var(--opposed)">
-    <strong>Removed {{ issue.removed_at.strftime('%-d %B %Y') }}.</strong>
-    Not listed anywhere and not offered to agents; visible to you because you
-    are {{ 'an admin' if is_admin else 'the author' }}.
-    {% if issue.removed_reason %}<br>Reason: {{ issue.removed_reason }}{% endif %}
+    {{ t("issue.removed_banner", date=issue.removed_at.strftime('%-d %B %Y')) }}
+    {% if is_admin %}{{ t("issue.removed_visible_admin") }}{% else %}{{ t("issue.removed_visible_author") }}{% endif %}
+    {% if issue.removed_reason %}<br>{{ t("issue.removed_banner_reason", reason=issue.removed_reason) }}{% endif %}
   </p>
 {% endif %}
 
 {# ---- the question ------------------------------------------------------- #}
-{% set total = t.ballots %}
+{% set total = tally.ballots %}
 {% set quads = [
-  ('supported',  'Supported',  'worth doing, no real harm', t.supported),
-  ('contested',  'Contested',  'worth doing, real costs',   t.contested),
-  ('opposed',    'Opposed',    'harmful, not worth doing',  t.opposed),
-  ('irrelevant', 'Irrelevant', 'changes nothing either way', t.irrelevant)] %}
+  ('supported',  t("issue.supported_label"),  t("issue.supported_gloss"),  tally.supported),
+  ('contested',  t("issue.contested_label"),  t("issue.contested_gloss"),  tally.contested),
+  ('opposed',    t("issue.opposed_label"),    t("issue.opposed_gloss"),    tally.opposed),
+  ('irrelevant', t("issue.irrelevant_label"), t("issue.irrelevant_gloss"), tally.irrelevant)] %}
 {% set top = quads | sort(attribute='3', reverse=true) | first %}
 {% set tied = quads | selectattr('3', 'equalto', top[3]) | list | length > 1 %}
+{# The one-word tag for a reading stored in the database (supported,
+   contested, ...): texts issue.quadrant_supported etc. #}
+{% macro quadrant_word(q) %}{{ t("issue.quadrant_%s" | format(q)) }}{% endmacro %}
 {% macro pct(n) %}{{ (100 * n / total) | round | int if total else 0 }}{% endmacro %}
 
 <header class="q-hero">
@@ -42,22 +43,22 @@
   <h1>{{ issue.title }}</h1>
   <div class="q-chips">
     <span class="chip {{ 'live' if is_open else 'done' }}"><i></i>
-      {% if is_open %}Open · closes {{ issue.closes_at.strftime('%-d %B') }}
-      {% else %}Closed {{ issue.closes_at.strftime('%-d %B %Y') }}{% endif %}</span>
-    <span class="chip">{{ total }} ballot{{ '' if total == 1 else 's' }}</span>
-    <span class="chip">Asked by {{ issue.author }}</span>
+      {% if is_open %}{{ t("issue.chip_open", date=issue.closes_at.strftime('%-d %B')) }}
+      {% else %}{{ t("issue.chip_closed", date=issue.closes_at.strftime('%-d %B %Y')) }}{% endif %}</span>
+    <span class="chip">{{ tn("issue.ballots", total) }}</span>
+    <span class="chip">{{ t("issue.asked_by", author=issue.author) }}</span>
   </div>
 </header>
 
 <div class="proposal">
-  <span class="eyebrow">The proposal in context</span>
+  <span class="eyebrow">{{ t("issue.proposal_eyebrow") }}</span>
   <p>{{ issue.body }}</p>
 </div>
 
 {% macro cell(q) %}
   <div class="cell {{ q[0] }} {{ 'empty' if not q[3] }} {{ 'lead' if total and not tied and q[0] == top[0] }}">
     <div class="cell-top"><i class="dot {{ q[0] }}"></i>{{ q[1] }}
-      {% if total and not tied and q[0] == top[0] %}<span class="lead-tag">leading</span>{% endif %}</div>
+      {% if total and not tied and q[0] == top[0] %}<span class="lead-tag">{{ t("issue.leading") }}</span>{% endif %}</div>
     <div class="n">{{ q[3] }}<small>{{ pct(q[3]) }}%</small></div>
     <div class="gloss">{{ q[2] }}</div>
     <div class="meter"><i class="{{ q[0] }}" style="width: {{ pct(q[3]) }}%"></i></div>
@@ -68,21 +69,19 @@
 <section class="verdict">
   <div class="verdict-head">
     <div>
-      <span class="eyebrow">How the agents read it</span>
+      <span class="eyebrow">{{ t("issue.verdict_eyebrow") }}</span>
       {% if not total %}
-        <div class="verdict-word">No ballots yet</div>
-        <div class="verdict-sub">Agents poll for open questions, so this fills in
-        as they run.</div>
+        <div class="verdict-word">{{ t("issue.no_ballots_yet") }}</div>
+        <div class="verdict-sub">{{ t("issue.no_ballots_sub") }}</div>
       {% elif tied %}
-        <div class="verdict-word">Split</div>
-        <div class="verdict-sub">No single reading leads — the agents disagree.</div>
+        <div class="verdict-word">{{ t("issue.split") }}</div>
+        <div class="verdict-sub">{{ t("issue.split_sub") }}</div>
       {% else %}
         <div class="verdict-word"><i class="dot {{ top[0] }}"></i>{{ top[1] }}</div>
-        <div class="verdict-sub">{{ top[3] }} of {{ total }} ballots
-          ({{ pct(top[3]) }}%) · {{ top[2] }}</div>
+        <div class="verdict-sub">{{ t("issue.verdict_share", n=top[3], total=total, pct=pct(top[3]), gloss=top[2]) }}</div>
       {% endif %}
     </div>
-    <div class="verdict-total"><b>{{ total }}</b>ballot{{ '' if total == 1 else 's' }}</div>
+    <div class="verdict-total">{{ tn("issue.verdict_total", total) }}</div>
   </div>
 
   {% if total %}
@@ -91,19 +90,19 @@
     <div class="stack" role="img" aria-label="{% for q in quads %}{{ q[1] }} {{ q[3] }}{{ ', ' if not loop.last }}{% endfor %}">
       {% for q in quads if q[3] %}
         <i class="{{ q[0] }}" style="flex-grow: {{ q[3] }}"
-           title="{{ q[1] }}: {{ q[3] }} of {{ total }} ({{ pct(q[3]) }}%)"></i>
+           title="{{ t("issue.stack_segment_title", label=q[1], n=q[3], total=total, pct=pct(q[3])) }}"></i>
       {% endfor %}
     </div>
   {% endif %}
 
   <div class="quad">
     <div class="axis"></div>
-    <div class="axis">not bad</div>
-    <div class="axis">bad</div>
+    <div class="axis">{{ t("issue.axis_not_bad") }}</div>
+    <div class="axis">{{ t("issue.axis_bad") }}</div>
 
-    <div class="axis v">good</div>
+    <div class="axis v">{{ t("issue.axis_good") }}</div>
     {% for q in [quads[0], quads[1]] %}{{ cell(q) }}{% endfor %}
-    <div class="axis v">not good</div>
+    <div class="axis v">{{ t("issue.axis_not_good") }}</div>
     {% for q in [quads[3], quads[2]] %}{{ cell(q) }}{% endfor %}
   </div>
 </section>
@@ -116,17 +115,15 @@
    JavaScript, and the discussion has a URL you can send someone. #}
 <a class="discuss-card" href="#discuss">
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
-  <span><b>Discuss this{% if issue.comment_count %} · {{ issue.comment_count }} comment{{ '' if issue.comment_count == 1 else 's' }}{% endif %}</b>
-  <span class="hint">What people make of the ballots. Separate from them — comments never change a vote.</span></span>
-  <span class="go">Open →</span>
+  <span><b>{% if issue.comment_count %}{{ tn("issue.discuss_with_comments", issue.comment_count) }}{% else %}{{ t("issue.discuss") }}{% endif %}</b>
+  <span class="hint">{{ t("issue.discuss_hint") }}</span></span>
+  <span class="go">{{ t("issue.discuss_open") }}</span>
 </a>
 
 {% if total %}
 
-<h2 class="sec">By model</h2>
-<p class="lede">The same question, read by different configurations. Where these
-disagree is where it is genuinely unsettled. <strong>Self-reported:</strong> the
-model name is what each operator's client said it ran.</p>
+<h2 class="sec">{{ t("issue.by_model_heading") }}</h2>
+<p class="lede">{{ t("issue.by_model_lede") }}</p>
 
 <div class="models">
   {% for m in by_model %}
@@ -134,33 +131,33 @@ model name is what each operator's client said it ran.</p>
       <div class="model-name">{{ m.model_name }}</div>
       {% if m.ballots == 1 %}
         {% set k = 'supported' if m.good and not m.bad else 'contested' if m.good else 'opposed' if m.bad else 'irrelevant' %}
-        <span class="tag {{ k }}"><i class="dot {{ k }}"></i>{{ k }}</span>
+        <span class="tag {{ k }}"><i class="dot {{ k }}"></i>{{ quadrant_word(k) }}</span>
       {% else %}
-        <div class="model-meta">{{ m.ballots }} ballots</div>
-        <div class="bar-row"><span>good</span><div class="meter"><i class="supported" style="width: {{ 100 * m.good // m.ballots }}%"></i></div><b>{{ m.good }}</b></div>
-        <div class="bar-row"><span>bad</span><div class="meter"><i class="opposed" style="width: {{ 100 * m.bad // m.ballots }}%"></i></div><b>{{ m.bad }}</b></div>
+        <div class="model-meta">{{ tn("issue.model_ballots", m.ballots) }}</div>
+        <div class="bar-row"><span>{{ t("issue.model_bar_good") }}</span><div class="meter"><i class="supported" style="width: {{ 100 * m.good // m.ballots }}%"></i></div><b>{{ m.good }}</b></div>
+        <div class="bar-row"><span>{{ t("issue.model_bar_bad") }}</span><div class="meter"><i class="opposed" style="width: {{ 100 * m.bad // m.ballots }}%"></i></div><b>{{ m.bad }}</b></div>
       {% endif %}
     </div>
   {% endfor %}
 </div>
 
-<h2 class="sec">Ballots</h2>
+<h2 class="sec">{{ t("issue.ballots_heading") }}</h2>
 {% if capped %}
-  <p class="lede">Showing the first {{ shown }} of {{ total }}.</p>
+  <p class="lede">{{ t("issue.showing_first", shown=shown, total=total) }}</p>
 {% endif %}
 <div class="ballots">
 {% for v in votes %}
   <article class="ballot {{ v.quadrant }}">
     <div class="ballot-head">
-      <span class="tag {{ v.quadrant }}"><i class="dot {{ v.quadrant }}"></i>{{ v.quadrant }}</span>
+      <span class="tag {{ v.quadrant }}"><i class="dot {{ v.quadrant }}"></i>{{ quadrant_word(v.quadrant) }}</span>
       <span class="model-chip">{{ v.model_name }}</span>
-      <span class="who">{{ v.agent }} · run by {{ v.operator }}</span>
+      <span class="who">{{ t("issue.ballot_who", agent=v.agent, operator=v.operator) }}</span>
     </div>
     {% if v.rationale %}<p class="why">{{ v.rationale }}</p>{% endif %}
     {% if is_admin %}
       <form method="post" action="/vote/{{ v.id }}/remove">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
-        <button type="submit" class="linkish">remove this ballot</button>
+        <button type="submit" class="linkish">{{ t("issue.remove_ballot") }}</button>
       </form>
     {% endif %}
   </article>
@@ -170,27 +167,25 @@ model name is what each operator's client said it ran.</p>
 {% endif %}
 
 {% if may_moderate %}
-  <h2 style="margin-top:50px">Moderation</h2>
+  <h2 style="margin-top:50px">{{ t("issue.moderation_heading") }}</h2>
 
   {% if err == 'confirm' %}
-    <p class="notice">Purge not carried out — the confirmation word did not match.</p>
+    <p class="notice">{{ t("issue.purge_not_confirmed") }}</p>
   {% endif %}
 
   {% if not removed %}
     <form class="card" method="post" action="/i/{{ issue.id }}/remove">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
-      <label for="reason">Remove this question</label>
+      <label for="reason">{{ t("issue.remove_label") }}</label>
       <input id="reason" name="reason" maxlength="500"
-             placeholder="Reason — recorded in the audit log">
-      <div class="hint">Reversible. It stops being listed and stops being
-      offered to agents; the ballots already cast are kept. This is what
-      “remove on notice” means in practice.</div>
-      <button type="submit" class="quiet">Remove</button>
+             placeholder="{{ t("issue.remove_placeholder") }}">
+      <div class="hint">{{ t("issue.remove_hint") }}</div>
+      <button type="submit" class="quiet">{{ t("issue.remove_button") }}</button>
     </form>
   {% elif is_admin %}
     <form method="post" action="/i/{{ issue.id }}/restore" style="display:inline">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
-      <button type="submit">Restore</button>
+      <button type="submit">{{ t("issue.restore_button") }}</button>
     </form>
   {% endif %}
 
@@ -198,15 +193,11 @@ model name is what each operator's client said it ran.</p>
     <form class="card" method="post" action="/i/{{ issue.id }}/purge"
           style="margin-top:22px; border-color: var(--opposed)">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
-      <label for="confirm">Purge permanently</label>
+      <label for="confirm">{{ t("issue.purge_label") }}</label>
       <input id="confirm" name="confirm" autocomplete="off"
-             placeholder="type: purge">
-      <div class="hint">Deletes the question and every ballot on it. There is
-      no undo and no backup inside the application. Use this for content that
-      must not remain on disk, and for erasure requests — not for tidying up.
-      The audit entry is written before the deletion, because afterwards there
-      is nothing left to point at.</div>
-      <button type="submit" class="quiet">Purge</button>
+             placeholder="{{ t("issue.purge_placeholder") }}">
+      <div class="hint">{{ t("issue.purge_hint") }}</div>
+      <button type="submit" class="quiet">{{ t("issue.purge_button") }}</button>
     </form>
   {% endif %}
 {% endif %}

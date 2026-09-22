@@ -13,37 +13,33 @@
 
 <div class="overlay" id="discuss">
   {# Clicking the backdrop clears the fragment, which closes the window. #}
-  <a class="overlay-out" href="#" aria-label="Close the discussion"></a>
+  <a class="overlay-out" href="#" aria-label="{{ t("discussion.close_backdrop") }}"></a>
 
-  <div class="panel" role="dialog" aria-label="Discussion">
+  <div class="panel" role="dialog" aria-label="{{ t("discussion.dialog_label") }}">
     <div class="panel-head">
       <div>
-        <strong>Discussion</strong>
+        <strong>{{ t("discussion.heading") }}</strong>
         <div class="hint">{{ issue.title }}</div>
       </div>
-      <a class="panel-close" href="#" title="Close">&times;</a>
+      <a class="panel-close" href="#" title="{{ t("discussion.close") }}">&times;</a>
     </div>
 
     <div class="panel-body">
-<p class="lede">People talking to each other about what the models said. These
-scores are human votes on comments — they are not part of the tally behind
-this window, and nothing here changes what any agent answered.</p>
+<p class="lede">{{ t("discussion.lede") }}</p>
 
 {% if may_comment %}
   <form class="card" method="post" action="/i/{{ issue.id }}/comment">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="sort" value="{{ comment_sort }}">
-    <label for="body">Add a comment</label>
+    <label for="body">{{ t("discussion.add_label") }}</label>
     <textarea id="body" name="body" rows="3" maxlength="5000"
-              placeholder="Write @username to notify someone."></textarea>
-    <button type="submit">Comment</button>
+              placeholder="{{ t("discussion.mention_placeholder") }}"></textarea>
+    <button type="submit">{{ t("discussion.comment_button") }}</button>
   </form>
 {% elif user %}
-  <p class="notice">Your account is still awaiting approval, so you can read
-  the discussion but not add to it yet.</p>
+  <p class="notice">{{ t("discussion.awaiting_approval") }}</p>
 {% else %}
-  <p class="notice"><a href="/login?next=/i/{{ issue.id }}">Log in</a> to join
-  the discussion.</p>
+  <p class="notice">{{ t("discussion.log_in_to_join", url="/login?next=/i/" ~ issue.id) }}</p>
 {% endif %}
 
 {% if comments %}
@@ -60,9 +56,8 @@ this window, and nothing here changes what any agent answered.</p>
        style="margin-left: {{ c.indent * 22 }}px">
 
     {% if c.removed and not c.may_see %}
-      <div class="who">[removed{% if c.removed_reason %} — {{ c.removed_reason }}{% endif %}]</div>
-      <div class="why">A comment was here and has been taken down. The replies
-      to it are kept, which is why this line is still here.</div>
+      <div class="who">{% if c.removed_reason %}{{ t("discussion.removed_with_reason", reason=c.removed_reason) }}{% else %}{{ t("discussion.removed") }}{% endif %}</div>
+      <div class="why">{{ t("discussion.removed_explanation") }}</div>
     {% else %}
       <div class="who">
         <span class="arrows">
@@ -72,7 +67,7 @@ this window, and nothing here changes what any agent answered.</p>
               <input type="hidden" name="sort" value="{{ comment_sort }}">
               <input type="hidden" name="value" value="1">
               <button type="submit" class="arrow {{ 'on' if c.my_vote == 1 }}"
-                      title="Agree">&#9650;</button>
+                      title="{{ t("discussion.agree") }}">&#9650;</button>
             </form>
           {% endif %}
           <b class="{{ 'pos' if c.score > 0 }}{{ 'neg' if c.score < 0 }}">{{ c.score }}</b>
@@ -82,13 +77,13 @@ this window, and nothing here changes what any agent answered.</p>
               <input type="hidden" name="sort" value="{{ comment_sort }}">
               <input type="hidden" name="value" value="-1">
               <button type="submit" class="arrow {{ 'on' if c.my_vote == -1 }}"
-                      title="Disagree">&#9660;</button>
+                      title="{{ t("discussion.disagree") }}">&#9660;</button>
             </form>
           {% endif %}
         </span>
         {{ c.author }} · {{ c.created_at.strftime('%-d %B %H:%M') }}
-        {% if c.edited_at %}· edited{% endif %}
-        {% if c.removed %}· <strong>removed, visible to you only</strong>{% endif %}
+        {% if c.edited_at %}· {{ t("discussion.edited") }}{% endif %}
+        {% if c.removed %}· <strong>{{ t("discussion.removed_visible_to_you") }}</strong>{% endif %}
       </div>
 
       <div class="why">{{ c.body }}</div>
@@ -98,30 +93,30 @@ this window, and nothing here changes what any agent answered.</p>
            disclosure that needs no script. #}
         {% if may_comment and not c.removed %}
           <details class="inline-form">
-            <summary>reply</summary>
+            <summary>{{ t("discussion.reply") }}</summary>
             <form method="post" action="/i/{{ issue.id }}/comment">
               <input type="hidden" name="csrf" value="{{ csrf_token }}">
               <input type="hidden" name="sort" value="{{ comment_sort }}">
               <input type="hidden" name="parent_id" value="{{ c.id }}">
               <textarea name="body" rows="3" maxlength="5000" required
-                        aria-label="Reply to {{ c.author }}"
-                        placeholder="Reply to {{ c.author }}…"></textarea>
-              <div class="row"><button type="submit">Post reply</button>
-                <span class="hint">Write @username to notify someone.</span></div>
+                        aria-label="{{ t("discussion.reply_to_label", author=c.author) }}"
+                        placeholder="{{ t("discussion.reply_to_placeholder", author=c.author) }}"></textarea>
+              <div class="row"><button type="submit">{{ t("discussion.post_reply") }}</button>
+                <span class="hint">{{ t("discussion.mention_hint") }}</span></div>
             </form>
           </details>
         {% elif user and not c.removed %}
-          <a href="/c/{{ c.id }}/reply?sort={{ comment_sort }}">reply</a>
+          <a href="/c/{{ c.id }}/reply?sort={{ comment_sort }}">{{ t("discussion.reply") }}</a>
         {% endif %}
         {% if user and user.id == c.author_id and not c.removed %}
           <details class="inline-form">
-            <summary>edit</summary>
+            <summary>{{ t("discussion.edit") }}</summary>
             <form method="post" action="/c/{{ c.id }}/edit">
               <input type="hidden" name="csrf" value="{{ csrf_token }}">
               <input type="hidden" name="sort" value="{{ comment_sort }}">
               <textarea name="body" rows="3" maxlength="5000" required
-                        aria-label="Edit your comment">{{ c.body }}</textarea>
-              <div class="row"><button type="submit">Save</button></div>
+                        aria-label="{{ t("discussion.edit_label") }}">{{ c.body }}</textarea>
+              <div class="row"><button type="submit">{{ t("discussion.save") }}</button></div>
             </form>
           </details>
         {% endif %}
@@ -129,19 +124,19 @@ this window, and nothing here changes what any agent answered.</p>
           <form method="post" action="/c/{{ c.id }}/remove" class="inline">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
             <input type="hidden" name="sort" value="{{ comment_sort }}">
-            <button type="submit" class="linkish">remove</button>
+            <button type="submit" class="linkish">{{ t("discussion.remove") }}</button>
           </form>
         {% endif %}
         {% if c.removed and is_admin %}
           <form method="post" action="/c/{{ c.id }}/restore" class="inline">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
             <input type="hidden" name="sort" value="{{ comment_sort }}">
-            <button type="submit" class="linkish">restore</button>
+            <button type="submit" class="linkish">{{ t("discussion.restore") }}</button>
           </form>
           <form method="post" action="/c/{{ c.id }}/purge" class="inline">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
             <input type="hidden" name="sort" value="{{ comment_sort }}">
-            <button type="submit" class="linkish danger">purge with replies</button>
+            <button type="submit" class="linkish danger">{{ t("discussion.purge") }}</button>
           </form>
         {% endif %}
       </div>

@@ -98,6 +98,10 @@ services:
       - LOGIN_FAILS_PER_IP=${LOGIN_FAILS_PER_IP:-20}
       - LOGIN_FAILS_PER_ACCOUNT=${LOGIN_FAILS_PER_ACCOUNT:-8}
       - RESET_TTL_MINUTES=${RESET_TTL_MINUTES:-60}
+    # The site's texts, mounted so an edit shows on the next page load
+    # without a rebuild. Read-only: the app never writes to it.
+    volumes:
+      - ./texts.toml:/srv/texts.toml:ro
     depends_on:
       postgres:
         condition: service_healthy

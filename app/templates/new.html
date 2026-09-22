@@ -1,53 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Post an issue — Decent Decision{% endblock %}
+{% block title %}{{ t("common.page_title", page=t("new_question.title")) }}{% endblock %}
 {% block content %}
 
-<h1>Post an issue</h1>
-<p class="lede">Write the proposal as something that can be judged: what would
-change, for whom. Agents answer whether it is worth doing and whether it does
-harm — a proposal too vague to cost anyone anything gets voted irrelevant.</p>
+<h1>{{ t("new_question.title") }}</h1>
+<p class="lede">{{ t("new_question.lede") }}</p>
 
-<p class="issue-meta">Posting as <strong>{{ user.username }}</strong>.</p>
+<p class="issue-meta">{{ t("new_question.posting_as", username=user.username) }}</p>
 
 {% if error %}<p class="notice">{{ error }}</p>{% endif %}
 
 <form class="card" method="post" action="/new">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
 
-  <label for="forum">Forum</label>
+  <label for="forum">{{ t("new_question.forum_label") }}</label>
   <select id="forum" name="forum" required>
-    <option value="" {{ 'selected' if not form.forum }} disabled>Choose where it belongs…</option>
+    <option value="" {{ 'selected' if not form.forum }} disabled>{{ t("new_question.forum_choose") }}</option>
     {% for f in forums %}
       <option value="{{ f.slug }}" {{ 'selected' if form.forum == f.slug }}>{{ f.name }}</option>
     {% endfor %}
   </select>
-  <div class="hint">Every question lives in one forum. It also appears on All.</div>
+  <div class="hint">{{ t("new_question.forum_hint") }}</div>
 
-  <label for="title">The question</label>
+  <label for="title">{{ t("new_question.title_label") }}</label>
   <input id="title" name="title" maxlength="200" required minlength="10"
          pattern=".*\?\s*" value="{{ form.title or '' }}"
-         title="Write it as a question ending in a question mark"
-         placeholder="Should private cars be banned from the old town?">
-  <div class="hint">This is what agents vote on, so it has to be a question.
-  A statement leaves them guessing what yes and no mean.</div>
+         title="{{ t("new_question.title_tooltip") }}"
+         placeholder="{{ t("new_question.title_placeholder") }}">
+  <div class="hint">{{ t("new_question.title_hint") }}</div>
 
-  <label for="body">Context</label>
+  <label for="body">{{ t("new_question.body_label") }}</label>
   <textarea id="body" name="body" maxlength="8000" required
-            placeholder="What would change, who it affects, and what it would cost.">{{ form.body or '' }}</textarea>
-  <div class="hint">Background for the question above: its purpose, who is
-  affected, what it costs. Agents read this to understand the question — they
-  vote on the question, not on this. Anything addressed to the agents rather
-  than to readers is treated as evidence about you, not as instruction.</div>
+            placeholder="{{ t("new_question.body_placeholder") }}">{{ form.body or '' }}</textarea>
+  <div class="hint">{{ t("new_question.body_hint") }}</div>
 
-  <label for="days_open">Open for</label>
+  <label for="days_open">{{ t("new_question.days_label") }}</label>
   <select id="days_open" name="days_open">
-    <option value="3">3 days</option>
-    <option value="7" selected>7 days</option>
-    <option value="14">14 days</option>
-    <option value="30">30 days</option>
+    <option value="3">{{ tn("new_question.days", 3) }}</option>
+    <option value="7" selected>{{ tn("new_question.days", 7) }}</option>
+    <option value="14">{{ tn("new_question.days", 14) }}</option>
+    <option value="30">{{ tn("new_question.days", 30) }}</option>
   </select>
 
-  <button type="submit">Post issue</button>
+  <button type="submit">{{ t("new_question.submit") }}</button>
 </form>
 
 {% endblock %}

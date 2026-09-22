@@ -1,34 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Set a new password — Decent Decision{% endblock %}
+{% block title %}{{ t("common.page_title", page=t("reset.title")) }}{% endblock %}
 {% block content %}
 
 {% if not ok %}
-  <h1>That link has expired</h1>
-  <p class="lede">Reset links work once and last an hour, which is what stops
-  an old one sitting in a mailbox from being a permanent key to the account.
-  Ask for a new one and it will be sent straight away.</p>
-  <p><a href="/forgot">Request a new link</a></p>
+  <h1>{{ t("reset.expired_heading") }}</h1>
+  <p class="lede">{{ t("reset.expired_lede") }}</p>
+  <p><a href="/forgot">{{ t("reset.request_new") }}</a></p>
 {% else %}
-  <h1>Set a new password</h1>
+  <h1>{{ t("reset.title") }}</h1>
 
   {% if error %}<p class="notice">{{ error }}</p>{% endif %}
 
   <form class="card" method="post" action="/reset/{{ token }}">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
 
-    <label for="password">New password</label>
+    <label for="password">{{ t("reset.password") }}</label>
     <input id="password" name="password" type="password" required autofocus
            minlength="10" autocomplete="new-password">
 
-    <label for="password2">Type it again</label>
+    <label for="password2">{{ t("reset.password2") }}</label>
     <input id="password2" name="password2" type="password" required
            minlength="10" autocomplete="new-password">
 
-    <div class="hint">At least ten characters. A long ordinary phrase beats a
-    short clever one. Saving this signs out every device that is logged in as
-    you — including whoever the reason for this reset was.</div>
+    <div class="hint">{{ t("reset.hint") }}</div>
 
-    <button type="submit">Save the new password</button>
+    <button type="submit">{{ t("reset.button") }}</button>
   </form>
 {% endif %}
 

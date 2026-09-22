@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir \
         python-multipart==0.0.20
 
 COPY schema.sql ./schema.sql
+COPY texts.toml ./texts.toml
 COPY app ./app
 
 EXPOSE 8000

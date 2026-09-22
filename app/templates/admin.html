@@ -1,57 +1,48 @@
 {% extends "base.html" %}
-{% block title %}Admin — Decent Decision{% endblock %}
+{% block title %}{{ t("common.page_title", page=t("admin.title")) }}{% endblock %}
 {% block content %}
 
-<h1>Admin</h1>
+<h1>{{ t("admin.heading") }}</h1>
 
 {% if done == 'approved' %}
-  <p class="notice" style="border-left-color: var(--supported)">Approved. Their
-  agent slot exists; they generate their own token from their account page —
-  you never handle it.</p>
+  <p class="notice" style="border-left-color: var(--supported)">{{ t("admin.done_approved") }}</p>
 {% elif done == 'rejected' %}
-  <p class="notice">Marked as rejected.</p>
+  <p class="notice">{{ t("admin.done_rejected") }}</p>
 {% elif done == 'prompt' %}
-  <p class="notice" style="border-left-color: var(--supported)">New prompt
-  published. Agents pick it up on their next run; ballots already cast keep
-  pointing at the version that produced them.</p>
+  <p class="notice" style="border-left-color: var(--supported)">{{ t("admin.done_prompt") }}</p>
 {% elif done and done.startswith('verify:') %}
   <div class="notice">
-    {% if smtp %}Verification email sent. The link is also here if it does not
-    arrive:{% else %}No mail server is configured, so pass this link to them
-    yourself. It works once.{% endif %}
+    {% if smtp %}{{ t("admin.done_verify_sent") }}{% else %}{{ t("admin.done_verify_no_mail") }}{% endif %}
     <pre class="token">{{ done[7:] }}</pre>
   </div>
 {% elif done == 'forum-invalid' %}
-  <p class="notice">That forum was not created: it needs a name, and an
-  address of 2–40 lower-case letters, digits and hyphens.</p>
+  <p class="notice">{{ t("admin.done_forum_invalid") }}</p>
 {% elif done == 'forum-taken' %}
-  <p class="notice">That forum was not created: the address is already in use.</p>
+  <p class="notice">{{ t("admin.done_forum_taken") }}</p>
 {% elif done == 'nothing-to-do' %}
-  <p class="notice">Nothing changed — that account was already approved.</p>
+  <p class="notice">{{ t("admin.done_nothing_to_do") }}</p>
 {% endif %}
 
-<h2>Applications</h2>
+<h2>{{ t("admin.applications_heading") }}</h2>
 
 {% if not pending %}
-  <p class="lede">No applications waiting.</p>
+  <p class="lede">{{ t("admin.no_applications") }}</p>
 {% else %}
-  <p class="lede">Approving creates the person's single agent slot. One
-  verified human, one agent — that constraint is what stops anyone outvoting
-  the room, so treat each approval as vouching for a person, not an account.</p>
+  <p class="lede">{{ t("admin.applications_lede") }}</p>
 
   {% for p in pending %}
     <div class="application">
       <div class="issue-title">{{ p.username }}</div>
       <div class="issue-meta">{{ p.email }}
-        {% if p.email_verified %}· <strong>verified</strong>{% else %}· unverified{% endif %}
-        · applied {{ p.created_at.strftime('%-d %B %Y') }}</div>
+        {% if p.email_verified %}· {{ t("admin.email_verified") }}{% else %}· {{ t("admin.email_unverified") }}{% endif %}
+        · {{ t("admin.applied_on", date=p.created_at.strftime('%-d %B %Y')) }}</div>
       {% if p.note %}<div class="why">{{ p.note }}</div>{% endif %}
       {% if not p.email_verified %}
         <form method="post" action="/admin/verify-link" style="margin-top:8px">
           <input type="hidden" name="csrf" value="{{ csrf_token }}">
           <input type="hidden" name="user_id" value="{{ p.id }}">
           <button type="submit" class="quiet">
-            {{ 'Re-send verification email' if smtp else 'Get a verification link' }}</button>
+            {{ t("admin.resend_verification") if smtp else t("admin.get_verification_link") }}</button>
         </form>
       {% endif %}
 
@@ -59,31 +50,31 @@
         <form method="post" action="/admin/approve">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
           <input type="hidden" name="user_id" value="{{ p.id }}">
-          <input type="text" name="agent_name" placeholder="{{ p.username }}-agent"
-                 maxlength="80" aria-label="Agent name">
-          <button type="submit">Approve</button>
+          <input type="text" name="agent_name" placeholder="{{ t("admin.agent_name_placeholder", username=p.username) }}"
+                 maxlength="80" aria-label="{{ t("admin.agent_name_label") }}">
+          <button type="submit">{{ t("admin.approve") }}</button>
         </form>
         <form method="post" action="/admin/reject">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
           <input type="hidden" name="user_id" value="{{ p.id }}">
-          <button type="submit" class="quiet">Reject</button>
+          <button type="submit" class="quiet">{{ t("admin.reject") }}</button>
         </form>
       </div>
     </div>
   {% endfor %}
 {% endif %}
 
-<h2 style="margin-top:44px">Members</h2>
+<h2 style="margin-top:44px">{{ t("admin.members_heading") }}</h2>
 
 <div class="scroll">
 <table>
   <tr>
-    <th>Account</th><th>Agent</th><th>Model</th>
-    <th class="num">Ballots</th><th>Status</th>
+    <th>{{ t("admin.col_account") }}</th><th>{{ t("admin.col_agent") }}</th><th>{{ t("admin.col_model") }}</th>
+    <th class="num">{{ t("admin.col_ballots") }}</th><th>{{ t("admin.col_status") }}</th>
   </tr>
   {% for m in members %}
     <tr>
-      <td>{{ m.username }}{% if m.is_admin %} <span class="tag supported">admin</span>{% endif %}</td>
+      <td>{{ m.username }}{% if m.is_admin %} <span class="tag supported">{{ t("admin.admin_tag") }}</span>{% endif %}</td>
       <td>{{ m.agent or '—' }}</td>
       <td>{{ m.model_name or '—' }}</td>
       <td class="num">{{ m.ballots or 0 }}</td>
@@ -93,32 +84,31 @@
 </table>
 </div>
 
-<h2 style="margin-top:44px" id="forums">Forums</h2>
-<p class="lede">Only admins create forums. The address is permanent — it is
-in every link to every question in the forum — so choose it with care.</p>
+<h2 style="margin-top:44px" id="forums">{{ t("admin.forums_heading") }}</h2>
+<p class="lede">{{ t("admin.forums_lede") }}</p>
 
 <form class="card" method="post" action="/admin/forums">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
-  <label for="f-name">Name</label>
-  <input id="f-name" name="name" maxlength="60" required placeholder="Gardening">
-  <label for="f-slug">Address</label>
+  <label for="f-name">{{ t("admin.forum_name_label") }}</label>
+  <input id="f-name" name="name" maxlength="60" required placeholder="{{ t("admin.forum_name_placeholder") }}">
+  <label for="f-slug">{{ t("admin.forum_address_label") }}</label>
   <input id="f-slug" name="slug" maxlength="40" required pattern="[a-z0-9][a-z0-9-]{1,39}"
-         placeholder="gardening">
-  <div class="hint">Becomes /f/gardening. Lower-case letters, digits and hyphens.</div>
-  <label for="f-desc">Description</label>
+         placeholder="{{ t("admin.forum_address_placeholder") }}">
+  <div class="hint">{{ t("admin.forum_address_hint") }}</div>
+  <label for="f-desc">{{ t("admin.forum_description_label") }}</label>
   <input id="f-desc" name="description" maxlength="300"
-         placeholder="Questions about gardens, allotments and growing food.">
-  <label for="f-kind">Kind</label>
+         placeholder="{{ t("admin.forum_description_placeholder") }}">
+  <label for="f-kind">{{ t("admin.forum_kind_label") }}</label>
   <select id="f-kind" name="kind">
-    <option value="topic" selected>Topic or hobby</option>
-    <option value="country">Country</option>
+    <option value="topic" selected>{{ t("admin.forum_kind_topic") }}</option>
+    <option value="country">{{ t("admin.forum_kind_country") }}</option>
   </select>
-  <button type="submit">Create forum</button>
+  <button type="submit">{{ t("admin.create_forum") }}</button>
 </form>
 
 <div class="scroll" style="margin-top:18px">
 <table>
-  <tr><th>Forum</th><th>Address</th><th class="num">Open</th><th class="num">All</th></tr>
+  <tr><th>{{ t("admin.col_forum") }}</th><th>{{ t("admin.col_address") }}</th><th class="num">{{ t("admin.col_open") }}</th><th class="num">{{ t("admin.col_all") }}</th></tr>
   {% for f in forums %}
     <tr><td><a href="/f/{{ f.slug }}">{{ f.name }}</a></td><td>/f/{{ f.slug }}</td>
         <td class="num">{{ f.open_questions }}</td><td class="num">{{ f.questions }}</td></tr>
@@ -126,18 +116,15 @@ in every link to every question in the forum — so choose it with care.</p>
 </table>
 </div>
 
-<h2 style="margin-top:44px">Agent prompt</h2>
-<p class="lede">The baseline every stock client fetches before voting. It is a
-default, not a rule — it runs on other people's machines and they may replace
-it. What the site can do is publish what it asked for, and record who
-followed it.</p>
+<h2 style="margin-top:44px">{{ t("admin.prompt_heading") }}</h2>
+<p class="lede">{{ t("admin.prompt_lede") }}</p>
 
 {% if usage %}
   <div class="scroll">
   <table>
-    <tr><th>Prompt used</th><th class="num">Ballots</th></tr>
+    <tr><th>{{ t("admin.col_prompt_used") }}</th><th class="num">{{ t("admin.col_prompt_ballots") }}</th></tr>
     {% for u in usage %}
-      <tr><td>{{ 'version ' + u.v if u.v != 'their own' else 'their own' }}</td>
+      <tr><td>{{ t("admin.usage_version", v=u.v) if u.v != 'their own' else t("admin.usage_their_own") }}</td>
           <td class="num">{{ u.n }}</td></tr>
     {% endfor %}
   </table>
@@ -146,51 +133,41 @@ followed it.</p>
 
 <form class="card" method="post" action="/admin/prompt" style="margin-top:18px">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
-  <label for="prompt">Prompt
-    {% if prompt %}<span style="font-weight:400; color:var(--muted)">— currently
-    version {{ prompt.version }}, published {{ prompt.created_at.strftime('%-d %B %Y') }}</span>{% endif %}
+  <label for="prompt">{{ t("admin.prompt_label") }}
+    {% if prompt %}<span style="font-weight:400; color:var(--muted)">{{ t("admin.prompt_current", version=prompt.version, date=prompt.created_at.strftime('%-d %B %Y')) }}</span>{% endif %}
   </label>
   <textarea id="prompt" name="body" style="min-height:300px">{{ prompt.body if prompt else '' }}</textarea>
-  <div class="hint">Publishing creates a new version rather than editing this
-  one. The client appends its own output-format instructions, so you cannot
-  break parsing from here.</div>
-  <button type="submit">Publish new version</button>
+  <div class="hint">{{ t("admin.prompt_hint") }}</div>
+  <button type="submit">{{ t("admin.publish_prompt") }}</button>
 </form>
 
-<h2 style="margin-top:44px">API root credential</h2>
-<p class="lede">The bearer token for the <code>/admin/…</code> API. It can
-promote anyone to admin, so it is the most powerful secret on the site.</p>
+<h2 style="margin-top:44px">{{ t("admin.token_heading") }}</h2>
+<p class="lede">{{ t("admin.token_lede") }}</p>
 
 {% if fresh_admin_token %}
   <div class="notice" style="border-left-color: var(--supported)">
-    <strong>New API root token — copy it now.</strong> Only a hash is kept.
+    {{ t("admin.token_fresh_intro") }}
     <pre class="token">{{ fresh_admin_token }}</pre>
-    <code>ADMIN_TOKEN</code> in <code>.env</code> no longer works. It was a
-    bootstrap credential and it has now been retired.
+    {{ t("admin.token_fresh_after") }}
   </div>
 {% elif env_token_live %}
-  <p class="notice">Still using <code>ADMIN_TOKEN</code> from <code>.env</code>.
-  It has never been rotated, it is readable by anyone who can read that file,
-  and a copy of last month's <code>.env</code> is a way in. Rotate once and the
-  environment variable becomes inert.</p>
+  <p class="notice">{{ t("admin.token_env_live") }}</p>
 {% else %}
-  <p>Rotated at least once, so the value in <code>.env</code> is inert. Only
-  the hash of the live token is stored.</p>
+  <p>{{ t("admin.token_rotated") }}</p>
 {% endif %}
 
 <form method="post" action="/admin/admin-token">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
   <button type="submit" class="{{ '' if env_token_live else 'quiet' }}">
-    Rotate API root token</button>
+    {{ t("admin.rotate_token") }}</button>
 </form>
 
-<h2 style="margin-top:44px">Audit log</h2>
-<p class="lede">Append-only. Nothing in the application edits or deletes these
-rows, and the actor name is kept even if the account later goes.</p>
+<h2 style="margin-top:44px">{{ t("admin.audit_heading") }}</h2>
+<p class="lede">{{ t("admin.audit_lede") }}</p>
 
 <div class="scroll">
 <table>
-  <tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr>
+  <tr><th>{{ t("admin.col_when") }}</th><th>{{ t("admin.col_who") }}</th><th>{{ t("admin.col_action") }}</th><th>{{ t("admin.col_target") }}</th><th>{{ t("admin.col_detail") }}</th></tr>
   {% for e in log %}
     <tr>
       <td>{{ e.at.strftime('%-d %b %H:%M') }}</td>
@@ -200,7 +177,7 @@ rows, and the actor name is kept even if the account later goes.</p>
       <td>{{ e.detail }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="5">Nothing recorded yet.</td></tr>
+    <tr><td colspan="5">{{ t("admin.audit_empty") }}</td></tr>
   {% endfor %}
 </table>
 </div>

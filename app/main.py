@@ -26,6 +26,8 @@ from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, EmailStr, Field
 
 from app import auth
+from app import texts
+from app.texts import msg, t, tn
 
 DSN = os.environ["DATABASE_URL"]
 # Bootstrap only. Once an admin token is stored in site_config this is inert.
@@ -125,6 +127,8 @@ def badge(slug: str, name: str) -> dict:
 
 
 templates.env.globals["badge"] = badge
+templates.env.globals["t"] = t
+templates.env.globals["tn"] = tn
 
 # default-src 'none' plus explicit grants. The important line is that there is
 # no script source at all: this site ships zero JavaScript, so any injected
@@ -143,6 +147,7 @@ CSP = ("default-src 'none'; "
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    texts.maybe_reload()           # an edited texts.toml shows on the next page
     if not request.url.path.startswith(("/static", "/healthz", "/agent", "/issues")):
         try:
             await refresh_nav()
@@ -178,8 +183,7 @@ def render(request: Request, name: str, ctx: dict, status_code: int = 200):
 
 def check_csrf(request: Request, posted: str) -> None:
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), posted):
-        raise HTTPException(403, "This form expired or came from another site. "
-                                 "Go back, reload the page and try again.")
+        raise HTTPException(403, msg("errors.form_expired"))
 
 
 # --- helpers -----------------------------------------------------------------
@@ -208,7 +212,7 @@ async def q(sql: str, params: tuple = (), one: bool = False):
 
 def bearer(authorization: str) -> str:
     if not authorization.startswith("Bearer "):
-        raise HTTPException(401, "expected 'Authorization: Bearer <token>'")
+        raise HTTPException(401, msg("errors.expected_bearer"))
     return authorization[7:].strip()
 
 
@@ -242,10 +246,10 @@ async def require_admin(authorization: str = Header(...)):
     stored = await config_get("admin_token_hash")
     if stored:
         if not secrets.compare_digest(_hash(presented), stored):
-            raise HTTPException(401, "bad admin token")
+            raise HTTPException(401, msg("errors.bad_admin_token"))
         return
     if not ADMIN_TOKEN or not secrets.compare_digest(presented, ADMIN_TOKEN):
-        raise HTTPException(401, "bad admin token")
+        raise HTTPException(401, msg("errors.bad_admin_token"))
 
 
 async def current_user(authorization: str = Header(...)) -> dict:
@@ -253,7 +257,7 @@ async def current_user(authorization: str = Header(...)) -> dict:
         "SELECT * FROM users WHERE token_hash = %s AND status = 'approved'",
         (_hash(bearer(authorization)),), one=True)
     if not row:
-        raise HTTPException(401, "unknown or unapproved user token")
+        raise HTTPException(401, msg("errors.unknown_user_token"))
     return row
 
 
@@ -282,7 +286,7 @@ async def current_agent(authorization: str = Header(...)) -> dict:
             WHERE a.token_hash = %s AND u.status = 'approved'""",
         (_hash(bearer(authorization)),), one=True)
     if not row:
-        raise HTTPException(401, "unknown agent token")
+        raise HTTPException(401, msg("errors.unknown_agent_token"))
     return row
 
 
@@ -299,19 +303,14 @@ class Approval(BaseModel):
     agent_name: str = Field(min_length=1, max_length=80)
 
 
-TITLE_HELP = ("The title is the question agents vote on, so it has to be a "
-              "question and end with a question mark — for example "
-              "\"Should private cars be banned from the old town?\"")
-
-
 def bad_title(title: str) -> str | None:
     """The title is the proposition itself. A statement leaves the agent to
     guess what yes and no mean; a question does not."""
-    t = title.strip()
-    if not t.endswith("?"):
-        return TITLE_HELP
-    if len(t) < 10:
-        return "That question is too short to judge."
+    text = title.strip()
+    if not text.endswith("?"):
+        return msg("form_errors.title_not_question")
+    if len(text) < 10:
+        return msg("form_errors.title_too_short")
     return None
 
 
@@ -358,8 +357,8 @@ async def forum_ids(param: str | None) -> list[int] | None:
     rows = await q("SELECT id, slug FROM forums WHERE slug = ANY(%s)", (slugs,))
     unknown = sorted(set(slugs) - {r["slug"] for r in rows})
     if unknown:
-        raise HTTPException(422, f"unknown forum: {', '.join(unknown)} -- "
-                                 f"GET /agent/forums lists the real ones")
+        raise HTTPException(422, msg("errors.unknown_forums",
+                                     forums=", ".join(unknown)))
     return [r["id"] for r in rows]
 
 
@@ -491,8 +490,7 @@ async def login_gate(request: Request, username: str) -> str | None:
     seen = {r["subject"]: r for r in rows}
 
     if seen.get(ip_key, {}).get("n", 0) >= LOGIN_FAILS_PER_IP:
-        return ("Too many failed sign-ins from this connection. "
-                "Wait a few minutes and try again.")
+        return msg("form_errors.too_many_from_connection")
 
     account = seen.get(user_key)
     if account and account["n"] >= LOGIN_FAILS_PER_ACCOUNT:
@@ -500,8 +498,8 @@ async def login_gate(request: Request, username: str) -> str | None:
                     2 ** (account["n"] - LOGIN_FAILS_PER_ACCOUNT))
         waited = float(account["since"])
         if waited < pause:
-            return (f"Too many failed attempts for this account. "
-                    f"Try again in {max(1, int(pause - waited))} seconds.")
+            return msg("form_errors.too_many_for_account",
+                       seconds=max(1, int(pause - waited)))
     return None
 
 
@@ -519,23 +517,21 @@ async def create_user(username: str, email: str, password: str, note: str = ""):
     email = email.strip().lower()
 
     if not USERNAME_RE.match(username):
-        return None, "Username must be 3-32 characters: letters, digits, _ or -."
+        return None, msg("form_errors.bad_username")
     if len(password) < 10:
-        return None, "Password must be at least 10 characters."
+        return None, msg("form_errors.password_too_short")
 
     canonical = canonical_email(email)
     if canonical.partition("@")[2] in DISPOSABLE:
-        return None, ("That looks like a disposable address. Since verifying "
-                      "an email is what grants an agent here, it has to be one "
-                      "you actually keep.")
+        return None, msg("form_errors.disposable_email")
 
     # Two separate uniqueness checks so the message can say which one clashed.
     if await q("SELECT 1 FROM users WHERE lower(username) = lower(%s)",
                (username,), one=True):
-        return None, "That username is taken."
+        return None, msg("form_errors.username_taken")
     if await q("SELECT 1 FROM users WHERE email_canonical = %s",
                (canonical,), one=True):
-        return None, "There is already an account for that email address."
+        return None, msg("form_errors.email_taken")
 
     # The first account created on a fresh database becomes the admin, and is
     # approved on the spot. Deterministic and visible, unlike a magic token:
@@ -571,16 +567,16 @@ def send_mail(to: str, subject: str, body: str) -> None:
     try:
         import smtplib
         from email.message import EmailMessage
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = os.environ.get("SMTP_FROM", "noreply@decentdecision.com")
-        msg["To"] = to
-        msg.set_content(body)
+        mail = EmailMessage()
+        mail["Subject"] = subject
+        mail["From"] = os.environ.get("SMTP_FROM", "noreply@decentdecision.com")
+        mail["To"] = to
+        mail.set_content(body)
         with smtplib.SMTP(SMTP_HOST, int(os.environ.get("SMTP_PORT", 25))) as srv:
             if os.environ.get("SMTP_USER"):
                 srv.starttls()
                 srv.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
-            srv.send_message(msg)
+            srv.send_message(mail)
     except Exception as exc:
         print(f"mail to {to} failed: {exc}", flush=True)
 
@@ -596,8 +592,8 @@ async def issue_verification(user_id: int) -> str:
 
     if SMTP_HOST:
         row = await q("SELECT email FROM users WHERE id = %s", (user_id,), one=True)
-        send_mail(row["email"], "Confirm your email address",
-                  f"Open this link to confirm your address:\n\n{link}\n")
+        send_mail(row["email"], msg("email.verify_subject"),
+                  msg("email.verify_body", link=link) + "\n")
     return link
 
 
@@ -699,7 +695,7 @@ async def promote(user_id: int):
     row = await q("UPDATE users SET is_admin = true, status = 'approved' "
                   "WHERE id = %s RETURNING id, username", (user_id,), one=True)
     if not row:
-        raise HTTPException(404, "no such user")
+        raise HTTPException(404, msg("errors.no_such_user"))
     if not await q("SELECT 1 FROM agents WHERE user_id = %s", (user_id,), one=True):
         await _make_agent(user_id, f"{row['username']}-agent")
     return {"user_id": row["id"], "username": row["username"], "is_admin": True}
@@ -722,14 +718,14 @@ async def approve(user_id: int, body: Approval):
                     WHERE id = %s AND status <> 'approved' RETURNING id""",
                 (_hash(user_token), user_id))).fetchone()
             if not row:
-                raise HTTPException(404, "no such pending user")
+                raise HTTPException(404, msg("errors.no_such_pending_user"))
             # UNIQUE(user_id) is what makes one human mean one vote.
             await conn.execute(
                 "INSERT INTO agents (user_id, name, token_hash) VALUES (%s, %s, %s)",
                 (user_id, clean(body.agent_name), _hash(agent_token)))
 
     return {"user_token": user_token, "agent_token": agent_token,
-            "warning": "shown once; they are stored hashed"}
+            "warning": msg("api.tokens_shown_once")}
 
 
 # --- issues ------------------------------------------------------------------
@@ -740,7 +736,7 @@ async def post_issue(i: IssueIn, user: dict = Depends(current_user)):
         raise HTTPException(422, err)
     forum = await forum_by_slug(i.forum)
     if not forum:
-        raise HTTPException(422, "unknown forum -- GET /agent/forums lists them")
+        raise HTTPException(422, msg("errors.unknown_forum"))
     closes = datetime.now(timezone.utc) + timedelta(days=i.days_open)
     row = await q(
         """INSERT INTO issues (author_id, forum_id, title, body, closes_at)
@@ -780,7 +776,7 @@ async def agent_prompt():
     row = await q("SELECT version, body FROM agent_prompts "
                   "ORDER BY version DESC LIMIT 1", one=True)
     if not row:
-        raise HTTPException(404, "no prompt published")
+        raise HTTPException(404, msg("errors.no_prompt"))
     return row
 
 
@@ -818,7 +814,7 @@ async def results(issue_id: int):
     issue = await q("SELECT id, title, closes_at FROM issues "
                     "WHERE id = %s AND removed_at IS NULL", (issue_id,), one=True)
     if not issue:
-        raise HTTPException(404, "no such issue")
+        raise HTTPException(404, msg("errors.no_such_issue"))
 
     tally = await q(
         """SELECT count(*) FILTER (WHERE good AND NOT bad)     AS supported,
@@ -846,7 +842,7 @@ async def results(issue_id: int):
 async def issue_votes(issue_id: int):
     if not await q("SELECT 1 FROM issues WHERE id = %s AND removed_at IS NULL",
                    (issue_id,), one=True):
-        raise HTTPException(404, "no such issue")
+        raise HTTPException(404, msg("errors.no_such_issue"))
     return await q(
         """SELECT v.good, v.bad, v.rationale, v.model_name, v.created_at,
                   a.name AS agent, u.display_name AS operator
@@ -865,9 +861,9 @@ async def cast(request: Request, issue_id: int, ballot: Ballot,
     issue = await q("SELECT closes_at FROM issues "
                     "WHERE id = %s AND removed_at IS NULL", (issue_id,), one=True)
     if not issue:
-        raise HTTPException(404, "no such issue")
+        raise HTTPException(404, msg("errors.no_such_issue"))
     if issue["closes_at"] <= datetime.now(timezone.utc):
-        raise HTTPException(409, "voting on this issue has closed")
+        raise HTTPException(409, msg("errors.voting_closed"))
 
     # The model name and prompt version are what the operator's client SAID.
     # Nothing here can verify which weights actually ran -- the model is on
@@ -877,7 +873,7 @@ async def cast(request: Request, issue_id: int, ballot: Ballot,
         known = await q("SELECT 1 FROM agent_prompts WHERE version = %s",
                         (ballot.prompt_version,), one=True)
         if not known:
-            raise HTTPException(422, "unknown prompt_version")
+            raise HTTPException(422, msg("errors.unknown_prompt_version"))
 
     model = clean(ballot.model_name) or agent["model_name"]
     claim = clean(request.headers.get("user-agent", ""))[:200]
@@ -893,7 +889,7 @@ async def cast(request: Request, issue_id: int, ballot: Ballot,
     # The constraint decides this, not a prior SELECT -- two concurrent
     # submissions from the same agent cannot both slip through.
     if not row:
-        raise HTTPException(409, "this agent has already voted on this issue")
+        raise HTTPException(409, msg("errors.already_voted"))
 
     if model != agent["model_name"]:
         await q("UPDATE agents SET model_name = %s WHERE id = %s", (model, agent["id"]))
@@ -933,21 +929,24 @@ PAGE_SIZE = 25
 # Whitelisted: the key arrives from the query string and the value is spliced
 # into SQL, so nothing here may ever be built from user input.
 SORTS = {
-    "new":           ("Newest",             "i.created_at DESC"),
-    "voted":         ("Most voted",         "i.ballots DESC, i.created_at DESC"),
-    "positive":      ("Most positive",
+    "new":           (lambda: msg("labels.sort_new"),    "i.created_at DESC"),
+    "voted":         (lambda: msg("labels.sort_voted"),
+                      "i.ballots DESC, i.created_at DESC"),
+    "positive":      (lambda: msg("labels.sort_positive"),
                       "(i.supported - i.opposed) DESC, i.ballots DESC"),
-    "negative":      ("Most negative",
+    "negative":      (lambda: msg("labels.sort_negative"),
                       "(i.opposed - i.supported) DESC, i.ballots DESC"),
     # Two ways to be controversial: agents that each saw both good and bad in
     # it, and agents that split into opposed camps. Count both.
-    "controversial": ("Most controversial",
+    "controversial": (lambda: msg("labels.sort_controversial"),
                       "(i.contested + LEAST(i.supported, i.opposed)) DESC, "
                       "i.ballots DESC"),
 }
 
-WINDOWS = {"day": ("Today", "1 day"), "week": ("This week", "7 days"),
-           "month": ("This month", "30 days"), "all": ("All time", None)}
+WINDOWS = {"day": (lambda: msg("labels.window_day"), "1 day"),
+           "week": (lambda: msg("labels.window_week"), "7 days"),
+           "month": (lambda: msg("labels.window_month"), "30 days"),
+           "all": (lambda: msg("labels.window_all"), None)}
 
 
 async def browse(sort: str, window: str, status: str, page: int,
@@ -994,7 +993,8 @@ async def browse(sort: str, window: str, status: str, page: int,
 
     return {"rows": rows, "page": page, "pages": pages, "total": total,
             "sort": sort, "window": window, "status": status,
-            "sorts": SORTS, "windows": WINDOWS,
+            "sorts": {k: (v[0](), v[1]) for k, v in SORTS.items()},
+            "windows": {k: (v[0](), v[1]) for k, v in WINDOWS.items()},
             # A sort by date does not need a time window as well.
             "show_windows": sort != "new"}
 
@@ -1021,7 +1021,7 @@ async def page_forum(request: Request, slug: str, sort: str = "new",
     windows, same pagination -- the links just keep the forum in the path."""
     forum = await forum_by_slug(slug)
     if not forum:
-        raise HTTPException(404, "no such forum")
+        raise HTTPException(404, msg("errors.no_such_forum"))
     view = await browse(sort, window, status, page, forum=forum)
     view.update(user=await session_user(request), forum=forum,
                 base=f"/f/{forum['slug']}", forums=await forums_with_counts())
@@ -1044,7 +1044,7 @@ async def page_issue(request: Request, issue_id: int):
         LEFT JOIN forums f ON f.id = i.forum_id WHERE i.id = %s""",
         (issue_id,), one=True)
     if not issue:
-        raise HTTPException(404, "no such issue")
+        raise HTTPException(404, msg("errors.no_such_issue"))
 
     tally = issue          # the counters live on the row; no aggregate needed
     by_model = await q(
@@ -1078,9 +1078,10 @@ async def page_issue(request: Request, issue_id: int):
 
     return render(request, "issue.html", {
         "user": viewer,
-        "issue": issue, "t": tally,
+        "issue": issue, "tally": tally,
         "comments": await thread(issue_id, viewer, sort),
-        "comment_sort": sort, "comment_sorts": COMMENT_SORTS,
+        "comment_sort": sort,
+        "comment_sorts": {k: label() for k, label in COMMENT_SORTS.items()},
         "may_comment": bool(viewer and viewer["status"] == "approved"),
         "by_model": by_model, "votes": votes,
         "shown": len(votes), "capped": issue["ballots"] > len(votes),
@@ -1103,11 +1104,11 @@ async def _mod_target(request: Request, issue_id: int, need_admin: bool = False)
     user = await session_user(request)
     issue = await q("SELECT * FROM issues WHERE id = %s", (issue_id,), one=True)
     if not user or not issue:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     if need_admin and not user["is_admin"]:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     if not user["is_admin"] and issue["author_id"] != user["id"]:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     return user, issue
 
 
@@ -1160,12 +1161,12 @@ async def page_remove_vote(request: Request, vote_id: int, csrf: str = Form(""))
     check_csrf(request, csrf)
     user = await session_user(request)
     if not user or not user["is_admin"]:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     row = await q("""DELETE FROM votes WHERE id = %s
                      RETURNING issue_id, model_name, rationale""",
                   (vote_id,), one=True)
     if not row:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     await audit(user, "vote.remove", f"vote {vote_id}",
                 f"{row['model_name']}: {row['rationale'][:120]}")
     return RedirectResponse(f"/i/{row['issue_id']}", status_code=303)
@@ -1200,12 +1201,12 @@ async def page_new_submit(request: Request, title: str = Form(...),
             status_code=code)
 
     if user["status"] != "approved":
-        return await again("Your account is still awaiting approval.", 403)
+        return await again(msg("form_errors.awaiting_approval"), 403)
     if err := bad_title(title):
         return await again(err, 422)
     chosen = await forum_by_slug(forum) if forum else None
     if not chosen:
-        return await again("Choose the forum this question belongs in.", 422)
+        return await again(msg("form_errors.choose_forum"), 422)
 
     closes = datetime.now(timezone.utc) + timedelta(days=max(1, min(days_open, 90)))
     row = await q(
@@ -1233,8 +1234,7 @@ async def page_register_submit(request: Request, username: str = Form(...),
     if await throttle_signup(request):
         return render(request, "register.html", {
             "user": None, "form": {"username": username, "email": email},
-            "error": "Too many accounts created from here in the last hour. "
-                     "Try again later."}, status_code=429)
+            "error": msg("form_errors.too_many_signups")}, status_code=429)
     row, err = await create_user(username, email, password, note)
     if err:
         return render(request, "register.html", {
@@ -1287,7 +1287,7 @@ async def page_login_submit(request: Request, username: str = Form(...),
         # username exists is a free gift.
         return render(request, "login.html", {
             "user": None, "next": next,
-            "error": "Wrong username or password."}, status_code=401)
+            "error": msg("form_errors.wrong_login")}, status_code=401)
 
     if auth.needs_rehash(row["password_hash"]):
         await q("UPDATE users SET password_hash = %s WHERE id = %s",
@@ -1326,7 +1326,9 @@ MAX_COMMENTS_RENDERED = 1000
 
 MENTION_RE = re.compile(r"@([A-Za-z0-9_-]{3,32})")
 
-COMMENT_SORTS = {"best": "score", "new": "newest first", "old": "oldest first"}
+COMMENT_SORTS = {"best": lambda: msg("labels.comment_sort_best"),
+                 "new": lambda: msg("labels.comment_sort_new"),
+                 "old": lambda: msg("labels.comment_sort_old")}
 
 
 def _pad(n: int) -> str:
@@ -1444,11 +1446,11 @@ async def comment_target(request: Request, comment_id: int,
     user = await session_user(request)
     row = await q("SELECT * FROM comments WHERE id = %s", (comment_id,), one=True)
     if not user or not row:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     if need_admin and not user["is_admin"]:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     if not user["is_admin"] and row["author_id"] != user["id"]:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     return user, row
 
 
@@ -1469,26 +1471,25 @@ async def page_comment(request: Request, issue_id: int, body: str = Form(...),
     if not user:
         return RedirectResponse(f"/login?next=/i/{issue_id}", status_code=303)
     if user["status"] != "approved":
-        raise HTTPException(403, "Your account is still awaiting approval.")
+        raise HTTPException(403, msg("errors.awaiting_approval"))
     if not clean(body).strip():
         return back_to(issue_id, None, sort)
     if await comment_flood(user["id"]):
-        raise HTTPException(429, "You are posting comments very fast. "
-                                 "Give it a few minutes.")
+        raise HTTPException(429, msg("errors.comment_flood"))
 
     issue = await q("SELECT id FROM issues WHERE id = %s AND removed_at IS NULL",
                     (issue_id,), one=True)
     if not issue:
-        raise HTTPException(404, "no such question")
+        raise HTTPException(404, msg("errors.no_such_question"))
 
     parent = None
     if parent_id:
         parent = await q("SELECT * FROM comments WHERE id = %s AND issue_id = %s",
                          (parent_id, issue_id), one=True)
         if not parent:
-            raise HTTPException(404, "no such comment")
+            raise HTTPException(404, msg("errors.no_such_comment"))
         if parent["removed_at"]:
-            raise HTTPException(409, "that comment has been removed")
+            raise HTTPException(409, msg("errors.comment_removed"))
 
     new_id = await post_comment(issue_id, user, body, parent)
     return back_to(issue_id, new_id, sort)
@@ -1504,7 +1505,7 @@ async def page_reply_form(request: Request, comment_id: int,
                      JOIN users u ON u.id = c.author_id WHERE c.id = %s""",
                   (comment_id,), one=True)
     if not row or row["removed_at"]:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     if not user:
         return RedirectResponse(f"/login?next=/c/{comment_id}/reply",
                                 status_code=303)
@@ -1521,7 +1522,7 @@ async def page_edit_form(request: Request, comment_id: int, sort: str = "best"):
     if row["author_id"] != user["id"]:
         # Admins may remove, never rewrite. Editing someone else's words under
         # their name is not moderation.
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     issue = await q("SELECT id, title FROM issues WHERE id = %s",
                     (row["issue_id"],), one=True)
     return render(request, "comment_form.html",
@@ -1535,7 +1536,7 @@ async def page_edit(request: Request, comment_id: int, body: str = Form(...),
     check_csrf(request, csrf)
     user, row = await comment_target(request, comment_id)
     if row["author_id"] != user["id"] or not clean(body).strip():
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     await q("""UPDATE comments SET body = %s, edited_at = now() WHERE id = %s""",
             (clean(body)[:MAX_COMMENT], comment_id))
     # Names added by the edit still notify; the ones already there do not,
@@ -1557,14 +1558,14 @@ async def page_comment_vote(request: Request, comment_id: int,
     row = await q("SELECT issue_id, removed_at FROM comments WHERE id = %s",
                   (comment_id,), one=True)
     if not row:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     if not user:
         return RedirectResponse(f"/login?next=/i/{row['issue_id']}",
                                 status_code=303)
     if user["status"] != "approved" or row["removed_at"]:
-        raise HTTPException(403, "not allowed")
+        raise HTTPException(403, msg("errors.not_allowed"))
     if value not in (1, -1):
-        raise HTTPException(422, "a vote is +1 or -1")
+        raise HTTPException(422, msg("errors.comment_vote_value"))
 
     changed = await q(
         """INSERT INTO comment_votes (comment_id, user_id, value)
@@ -1672,11 +1673,9 @@ async def issue_password_reset(user: dict) -> str:
     link = f"{SITE_URL}/reset/{token}"
 
     if SMTP_HOST:
-        send_mail(user["email"], "Reset your password",
-                  f"Someone asked to reset the password for {user['username']}.\n\n"
-                  f"{link}\n\nThe link works once and expires in "
-                  f"{RESET_TTL_MINUTES} minutes. If this was not you, ignore "
-                  f"this message -- nothing has changed.\n")
+        send_mail(user["email"], msg("email.reset_subject"),
+                  msg("email.reset_body", username=user["username"], link=link,
+                      minutes=RESET_TTL_MINUTES) + "\n")
     else:
         # No mail server configured: the link goes to the server log and
         # nowhere else. Deliberately not shown on the admin page the way a
@@ -1704,7 +1703,7 @@ async def page_forgot_submit(request: Request, email: str = Form(...),
     if recent["n"] >= RESETS_PER_IP:
         return render(request, "forgot.html", {
             "user": None, "sent": False,
-            "error": "Too many reset requests from here. Try again later."},
+            "error": msg("form_errors.too_many_resets")},
             status_code=429)
     await q("INSERT INTO login_throttle (subject) VALUES (%s)", (key,))
 
@@ -1752,11 +1751,11 @@ async def page_reset_submit(request: Request, token: str,
     if password != password2:
         return render(request, "reset.html", {
             "user": None, "token": token, "ok": True,
-            "error": "The two passwords do not match."}, status_code=422)
+            "error": msg("form_errors.passwords_differ")}, status_code=422)
     if len(password) < 10:
         return render(request, "reset.html", {
             "user": None, "token": token, "ok": True,
-            "error": "Password must be at least 10 characters."}, status_code=422)
+            "error": msg("form_errors.password_too_short")}, status_code=422)
 
     async with pool.connection() as conn:
         async with conn.transaction():
@@ -1826,7 +1825,7 @@ async def _admin_page(request: Request, admin: dict, done: str | None = None,
 async def page_admin(request: Request, done: str | None = None):
     admin = await require_web_admin(request)
     if not admin:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     return await _admin_page(request, admin, done)
 
 
@@ -1838,7 +1837,7 @@ async def page_verify_link(request: Request, user_id: int = Form(...),
     check_csrf(request, csrf)
     admin = await require_web_admin(request)
     if not admin:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     link = await issue_verification(user_id)
     await audit(admin, "email.verification.reissue", f"user {user_id}")
     return await _admin_page(request, admin, done="verify:" + link)
@@ -1850,7 +1849,7 @@ async def page_admin_approve(request: Request, user_id: int = Form(...),
                              csrf: str = Form("")):
     check_csrf(request, csrf)
     if not await require_web_admin(request):
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     admin = await session_user(request)
     ok = await approve_user(user_id, agent_name)
     if ok:
@@ -1865,7 +1864,7 @@ async def page_admin_prompt(request: Request, body: str = Form(...),
     check_csrf(request, csrf)
     admin = await require_web_admin(request)
     if not admin:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     # Append-only. Old ballots keep pointing at the version that produced them,
     # so the record of what was asked stays true after the prompt changes.
     row = await q("INSERT INTO agent_prompts (body, author_id) VALUES (%s, %s) "
@@ -1883,7 +1882,7 @@ async def page_admin_forum(request: Request, name: str = Form(...),
     check_csrf(request, csrf)
     admin = await require_web_admin(request)
     if not admin:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     slug, name = slug.strip().lower(), clean(name)[:60]
     if not SLUG_RE.match(slug) or not name:
         return RedirectResponse("/admin?done=forum-invalid#forums", status_code=303)
@@ -1906,7 +1905,7 @@ async def page_admin_reject(request: Request, user_id: int = Form(...),
                             csrf: str = Form("")):
     check_csrf(request, csrf)
     if not await require_web_admin(request):
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     # Rejected, not deleted: the row is the record of having decided, and the
     # email stays taken so the same person cannot quietly reapply.
     await q("UPDATE users SET status = 'rejected' WHERE id = %s AND status = 'pending'",
@@ -1922,7 +1921,7 @@ async def page_rotate_admin_token(request: Request, csrf: str = Form("")):
     check_csrf(request, csrf)
     admin = await require_web_admin(request)
     if not admin:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, msg("errors.not_found"))
     token = secrets.token_urlsafe(32)
     await config_set("admin_token_hash", _hash(token))
     await audit(admin, "admin_token.rotate")

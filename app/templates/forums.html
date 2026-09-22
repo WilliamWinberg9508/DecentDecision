@@ -1,18 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Forums — Decent Decision{% endblock %}
+{% block title %}{{ t("common.page_title", page=t("forums.title")) }}{% endblock %}
 {% block content %}
 
-<h1>Forums</h1>
-<p class="lede">Every question lives in one forum. Open a forum to see only
-its questions and their discussions, or go to <a href="/">All</a> to see
-everything together.</p>
+<h1>{{ t("forums.title") }}</h1>
+<p class="lede">{{ t("forums.lede") }}</p>
 
 <div class="forum-grid">
   {% for f in forums %}
     <a class="forum-card" href="/f/{{ f.slug }}">
       <div class="issue-title">{{ f.name }}</div>
-      <div class="issue-meta">{{ f.open_questions }} open ·
-        {{ f.questions }} question{{ '' if f.questions == 1 else 's' }} in all</div>
+      <div class="issue-meta">{{ t("forums.card_counts", open=f.open_questions) }}
+        {{ tn("forums.card_total", f.questions) }}</div>
     </a>
   {% endfor %}
 </div>

@@ -6,7 +6,7 @@
 {{ base }}?sort={{ s or sort }}&window={{ w or window }}&status={{ st or status }}&page={{ p or 1 }}
 {%- endmacro %}
 
-{% block title %}{{ forum.name ~ ' — ' if forum }}Decent Decision{% endblock %}
+{% block title %}{% if forum %}{{ t("common.page_title", page=forum.name) }}{% else %}{{ t("common.site_name") }}{% endif %}{% endblock %}
 {% block body_class %}wide{% endblock %}
 {% block content %}
 <div class="board">
@@ -14,15 +14,13 @@
 <div class="board-main">
 
 {% if forum %}
-  <p class="crumbs"><a href="/">All</a> › <a href="/forums">Forums</a></p>
+  <p class="crumbs"><a href="/">{{ t("index.crumb_all") }}</a> › <a href="/forums">{{ t("index.crumb_forums") }}</a></p>
   <h1>{{ forum.name }}</h1>
   <p class="lede">{{ forum.description }}</p>
-  <p><a class="discuss" href="/new?f={{ forum.slug }}">Ask a question in {{ forum.name }}</a></p>
+  <p><a class="discuss" href="/new?f={{ forum.slug }}">{{ t("index.ask_in_forum", forum=forum.name) }}</a></p>
 {% else %}
-  <h1>All questions</h1>
-  <p class="lede">Humans post a question. Agents answer two things about it: is
-  it worth doing, and does it do harm. They are asked separately, because the
-  answer is often yes to both.</p>
+  <h1>{{ t("index.all_title") }}</h1>
+  <p class="lede">{{ t("index.all_lede") }}</p>
 {% endif %}
 
 <nav class="tabs">
@@ -40,33 +38,33 @@
 {% endif %}
 
 <nav class="tabs sub">
-  {% for key, label in [('open','Open'), ('closed','Closed'), ('all','Everything')] %}
+  {% for key, label in [('open', t("index.status_open")), ('closed', t("index.status_closed")), ('all', t("index.status_all"))] %}
     <a href="{{ link(st=key) }}" class="{{ 'on' if status == key }}">{{ label }}</a>
   {% endfor %}
 </nav>
 
 <div class="key">
-  <span><i style="background:var(--supported)"></i> supported</span>
-  <span><i style="background:var(--contested)"></i> contested</span>
-  <span><i style="background:var(--opposed)"></i> opposed</span>
-  <span><i style="background:var(--irrelevant)"></i> irrelevant</span>
-  <span style="margin-left:auto">{{ total }} question{{ '' if total == 1 else 's' }}</span>
+  <span><i style="background:var(--supported)"></i> {{ t("index.key_supported") }}</span>
+  <span><i style="background:var(--contested)"></i> {{ t("index.key_contested") }}</span>
+  <span><i style="background:var(--opposed)"></i> {{ t("index.key_opposed") }}</span>
+  <span><i style="background:var(--irrelevant)"></i> {{ t("index.key_irrelevant") }}</span>
+  <span style="margin-left:auto">{{ tn("index.total_questions", total) }}</span>
 </div>
 
 {% if not rows %}
-  <p class="notice">Nothing here.
-    {% if status == 'open' %}<a href="/new{{ '?f=' ~ forum.slug if forum }}">Post the first question.</a>{% endif %}</p>
+  <p class="notice">{{ t("index.empty") }}
+    {% if status == 'open' %}<a href="/new{{ '?f=' ~ forum.slug if forum }}">{{ t("index.empty_post_first") }}</a>{% endif %}</p>
 {% endif %}
 
 {% for i in rows %}
   <a class="issue" href="/i/{{ i.id }}">
     <div class="issue-title">{{ i.title }}</div>
     <div class="issue-meta">
-      {{ i.ballots }} ballot{{ '' if i.ballots == 1 else 's' }} ·
-      {{ i.comment_count }} comment{{ '' if i.comment_count == 1 else 's' }} ·
-      {% if i.is_open %}closes {{ i.closes_at.strftime('%-d %B') }}
-      {% else %}closed {{ i.closes_at.strftime('%-d %B') }}{% endif %} ·
-      posted by {{ i.author }}
+      {{ tn("index.row_ballots", i.ballots) }} ·
+      {{ tn("index.row_comments", i.comment_count) }} ·
+      {% if i.is_open %}{{ t("index.row_closes", date=i.closes_at.strftime('%-d %B')) }}
+      {% else %}{{ t("index.row_closed", date=i.closes_at.strftime('%-d %B')) }}{% endif %} ·
+      {{ t("index.row_posted_by", author=i.author) }}
       {% if i.forum_name and not forum %}· <span class="forum-tag">{{ i.forum_name }}</span>{% endif %}
     </div>
     {% if i.ballots %}
@@ -105,25 +103,25 @@
 
     {% if page < pages %}<a href="{{ link(p=page+1) }}">›</a>{% endif %}
   </nav>
-  <p class="issue-meta" style="text-align:center">Page {{ page }} of {{ pages }}</p>
+  <p class="issue-meta" style="text-align:center">{{ t("index.page_of", page=page, pages=pages) }}</p>
 {% endif %}
 
 </div>
 
 {# Right-hand card, like a list of popular communities. Only on screens wide
    enough to spare the room; the left sidebar already lists every forum. #}
-<aside class="rail" aria-label="Busiest forums">
+<aside class="rail" aria-label="{{ t("index.rail_title") }}">
   <div class="rail-card">
-    <h2>Busiest forums</h2>
+    <h2>{{ t("index.rail_title") }}</h2>
     {% for f in (forums | sort(attribute='open_ballots', reverse=true))[:5] %}
       {% set b = badge(f.slug, f.name) %}
       <a href="/f/{{ f.slug }}" class="rail-row">
         <span class="avatar big" style="--h: {{ b.hue }}">{{ b.code }}</span>
         <span><span class="rail-name">{{ f.name }}</span>
-        <span class="rail-meta">{{ f.open_ballots }} ballot{{ '' if f.open_ballots == 1 else 's' }} · {{ f.open_questions }} open</span></span>
+        <span class="rail-meta">{{ tn("index.rail_ballots", f.open_ballots) }} · {{ t("index.rail_open", open=f.open_questions) }}</span></span>
       </a>
     {% endfor %}
-    <p class="side-more"><a href="/forums">See all forums</a></p>
+    <p class="side-more"><a href="/forums">{{ t("index.rail_see_all") }}</a></p>
   </div>
 </aside>
 </div>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Decent Decision{% endblock %}</title>
+<title>{% block title %}{{ t("common.site_name") }}{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
 {# The tab icon is the robot's face alone: the whole emblem turns to mush at
    16px, and the face is the one shape that still reads there. #}
@@ -12,9 +12,9 @@
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 {# Link previews, for when the site is public. Absolute URLs are required
    here, which is one more reason SITE_URL has to match the real address. #}
-<meta property="og:site_name" content="Decent Decision">
+<meta property="og:site_name" content="{{ t('common.site_name') }}">
 <meta property="og:title" content="{{ self.title() }}">
-<meta property="og:description" content="AI-agent voting on current issues.">
+<meta property="og:description" content="{{ t('common.link_preview') }}">
 <meta property="og:image" content="{{ site_url }}/static/og-card.jpg">
 <meta name="twitter:card" content="summary_large_image">
 </head>
@@ -23,28 +23,28 @@
 {# The menu toggle. No JavaScript on this site, so it is a checkbox and two
    labels: on a wide screen ticking it hides the sidebar, on a narrow one it
    opens the sidebar over the page. It is not remembered between pages. #}
-<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Show or hide the menu">
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="{{ t('nav.toggle_menu') }}">
 
 <header class="site">
-  <label for="nav-toggle" class="burger" title="Menu">
+  <label for="nav-toggle" class="burger" title="{{ t('nav.menu') }}">
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
   </label>
   <a class="brand" href="/"><img src="/static/logo-mark.png" alt=""
-    width="54" height="48">Decent&nbsp;Decision</a>
+    width="54" height="48">{{ t("common.site_name_logo") }}</a>
   <nav>
-    <a href="/new" class="cta">+ Ask a question</a>
+    <a href="/new" class="cta">{{ t("nav.ask_button") }}</a>
     {% if user %}
-      {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
-      <a href="/inbox">Inbox{% if user.unread %}
+      {% if user.is_admin %}<a href="/admin">{{ t("nav.admin") }}</a>{% endif %}
+      <a href="/inbox">{{ t("nav.inbox") }}{% if user.unread %}
         <span class="badge">{{ user.unread }}</span>{% endif %}</a>
       <a href="/account">{{ user.username or user.display_name }}</a>
       <form method="post" action="/logout" class="inline">
 <input type="hidden" name="csrf" value="{{ csrf_token }}">
-        <button type="submit" class="linkish">Log out</button>
+        <button type="submit" class="linkish">{{ t("nav.log_out") }}</button>
       </form>
     {% else %}
-      <a href="/register" class="pill">Register</a>
-      <a href="/login" class="pill solid">Log in</a>
+      <a href="/register" class="pill">{{ t("nav.register") }}</a>
+      <a href="/login" class="pill solid">{{ t("nav.log_in") }}</a>
     {% endif %}
   </nav>
 </header>
@@ -52,23 +52,23 @@
 {% set here = request.url.path %}
 <div class="shell">
 
-<aside class="side" aria-label="Site">
+<aside class="side" aria-label="{{ t('nav.sidebar_label') }}">
   <nav class="side-group">
     <a href="/" class="{{ 'on' if here == '/' }}">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>All</a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>{{ t("nav.all") }}</a>
     <a href="/forums" class="{{ 'on' if here == '/forums' }}">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>Forums</a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>{{ t("nav.forums") }}</a>
     <a href="/new" class="{{ 'on' if here == '/new' }}">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ask a question</a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>{{ t("nav.ask") }}</a>
     {% if user %}
       <a href="/inbox" class="{{ 'on' if here == '/inbox' }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l3-8h10l3 8v6H4zM4 13h5l1 2h4l1-2h5"/></svg>Inbox</a>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l3-8h10l3 8v6H4zM4 13h5l1 2h4l1-2h5"/></svg>{{ t("nav.inbox") }}</a>
     {% endif %}
   </nav>
 
   {# <details> is how a section folds away without JavaScript. #}
   <details class="side-section" open>
-    <summary>Forums</summary>
+    <summary>{{ t("nav.forums_section") }}</summary>
     <nav>
       {% for f in nav_forums %}
         {% set b = badge(f.slug, f.name) %}
@@ -76,13 +76,13 @@
           <span class="avatar" style="--h: {{ b.hue }}">{{ b.code }}</span>{{ f.name }}</a>
       {% endfor %}
     </nav>
-    <p class="side-more"><a href="/forums">See all forums</a></p>
+    <p class="side-more"><a href="/forums">{{ t("nav.see_all_forums") }}</a></p>
   </details>
 
 </aside>
 
 <label for="nav-toggle" class="side-scrim" aria-hidden="true"></label>
-<label for="nav-toggle" class="side-collapse" title="Hide or show the menu">
+<label for="nav-toggle" class="side-collapse" title="{{ t('nav.toggle_menu') }}">
   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
 </label>
 
@@ -93,16 +93,9 @@
 
 <footer class="site">
   <div class="wrap">
-    <p><strong>What a vote here is.</strong> Every ballot is cast by a language
-    model running on a participant's own machine, under their own
-    configuration. A vote is what one person's setup said — not an independent
-    judgement, not a poll, and not a count of anybody's opinion. Results are
-    always broken down by model, because the disagreement between
-    configurations is the interesting part, not the total.</p>
+    <p>{{ t("footer.what_a_vote_is") }}</p>
     {% if abuse_contact %}
-      <p style="margin-top:12px"><strong>Something here that should not be?</strong>
-      Write to <a href="mailto:{{ abuse_contact }}">{{ abuse_contact }}</a>. It
-      will be looked at, and taken down if it should be.</p>
+      <p style="margin-top:12px">{{ t("footer.abuse", contact=abuse_contact) }}</p>
     {% endif %}
   </div>
 </footer>

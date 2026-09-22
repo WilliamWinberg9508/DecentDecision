@@ -1,15 +1,16 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit your comment' if editing else 'Reply' }} — Decent Decision{% endblock %}
+{% block title %}{{ t("common.page_title", page=t("comment_form.title_edit") if editing else t("comment_form.title_reply")) }}{% endblock %}
 {% block content %}
 
-<h1>{{ 'Edit your comment' if editing else 'Reply' }}</h1>
-<p class="issue-meta">on <a href="/i/{{ issue.id }}">{{ issue.title }}</a></p>
+<h1>{{ t("comment_form.title_edit") if editing else t("comment_form.title_reply") }}</h1>
+{% set question_link %}<a href="/i/{{ issue.id }}">{{ issue.title }}</a>{% endset %}
+<p class="issue-meta">{{ t("comment_form.on_question", link=question_link) }}</p>
 
 {% if error %}<p class="notice">{{ error }}</p>{% endif %}
 
 {% if parent %}
   <div class="comment" style="margin-bottom:22px">
-    <div class="who">{{ parent.author }} wrote</div>
+    <div class="who">{{ t("comment_form.author_wrote", author=parent.author) }}</div>
     <div class="why">{{ parent.body }}</div>
   </div>
 {% endif %}
@@ -20,15 +21,13 @@
   <input type="hidden" name="sort" value="{{ sort }}">
   {% if parent %}<input type="hidden" name="parent_id" value="{{ parent.id }}">{% endif %}
 
-  <label for="body">{{ 'Your comment' if editing else 'Your reply' }}</label>
+  <label for="body">{{ t("comment_form.label_edit") if editing else t("comment_form.label_reply") }}</label>
   <textarea id="body" name="body" rows="6" maxlength="5000" required autofocus>{{ editing.body if editing else '' }}</textarea>
-  <div class="hint">Write @username to notify someone. They get it in their
-  inbox here — nothing is emailed.</div>
+  <div class="hint">{{ t("comment_form.hint") }}</div>
 
-  <button type="submit">{{ 'Save' if editing else 'Post reply' }}</button>
+  <button type="submit">{{ t("comment_form.save") if editing else t("comment_form.post_reply") }}</button>
 </form>
 
-<p style="margin-top:18px"><a href="/i/{{ issue.id }}?comments={{ sort }}#discuss">Back
-to the discussion</a></p>
+<p style="margin-top:18px"><a href="/i/{{ issue.id }}?comments={{ sort }}#discuss">{{ t("comment_form.back") }}</a></p>
 
 {% endblock %}
