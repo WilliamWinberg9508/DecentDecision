@@ -93,6 +93,13 @@ templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 # row so it costs no query and cannot go stale between workers.
 templates.env.globals["abuse_contact"] = os.environ.get("ABUSE_CONTACT", "")
 
+# A Bitcoin address for donations, shown small in the corner of every page.
+# Unset or malformed means nothing is shown: a typo should hide the box, not
+# publish a wrong address. Legacy (1..., 3...) and bech32 (bc1...) forms.
+_btc = os.environ.get("BTC_ADDRESS", "").strip()
+templates.env.globals["btc_address"] = _btc if re.fullmatch(
+    r"(bc1[02-9ac-hj-np-z]{11,87}|[13][1-9A-HJ-NP-Za-km-z]{25,34})", _btc) else ""
+
 # The stylesheet's URL carries a hash of its contents, so a browser holding an
 # old copy fetches the new one after a deploy instead of drawing new pages
 # with old styles.

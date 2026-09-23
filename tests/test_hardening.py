@@ -51,3 +51,12 @@ def test_ipv6_is_limited_per_connection_not_per_address():
 
 def test_control_and_bidi_characters_are_stripped():
     assert dd.clean("a\x9b[2Jb‮c") == "a[2Jbc"
+
+
+async def test_the_donation_address_shows_only_when_set_and_valid(client, monkeypatch):
+    env = dd.templates.env.globals
+    monkeypatch.setitem(env, "btc_address", "")
+    assert 'class="donate"' not in (await client.get("/")).text
+    monkeypatch.setitem(env, "btc_address", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+    page = (await client.get("/")).text
+    assert 'href="bitcoin:bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"' in page

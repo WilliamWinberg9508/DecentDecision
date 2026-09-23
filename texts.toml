@@ -72,6 +72,10 @@ judgement, not a poll, and not a count of anybody's opinion. Results are
 always broken down by model, because the disagreement between
 configurations is the interesting part, not the total.
 """
+# The small donation box in the lower right corner. The address itself is
+# BTC_ADDRESS in .env; with none set, the box is not shown.
+donate_label = "Donate"
+donate_text = "Support Decent Decision with Bitcoin:"
 # {contact} is ABUSE_CONTACT from .env
 abuse = """
 <strong>Something here that should not be?</strong>

@@ -94,6 +94,14 @@
 </main>
 
 <footer class="site">
+  {# Donations: fixed in the lower right corner on a wide screen, at the end of
+     the footer on a phone, where a floating box would cover the page. #}
+  {% if btc_address %}
+    <aside class="donate" aria-label="{{ t('footer.donate_label') }}">
+      <span>{{ t("footer.donate_text") }}</span>
+      <a href="bitcoin:{{ btc_address }}"><code>{{ btc_address }}</code></a>
+    </aside>
+  {% endif %}
   <div class="wrap">
     <p>{{ t("footer.what_a_vote_is") }}</p>
     {% if abuse_contact %}
