@@ -43,8 +43,8 @@ Section "tallies agree with the ballots" {
 Section "WAL archiving" {
     docker compose exec -T postgres psql -U vote -d vote -c "SELECT archived_count, last_archived_wal, failed_count, last_failed_wal FROM pg_stat_archiver;"
 }
-Section "pgbackrest check" { docker compose exec -T backup pgbackrest --stanza=dd check }
-Section "pgbackrest info"  { docker compose exec -T backup pgbackrest --stanza=dd info }
+Section "pgbackrest check" { docker compose exec -T backup sh /backup/pgbr.sh --stanza=dd check }
+Section "pgbackrest info"  { docker compose exec -T backup sh /backup/pgbr.sh --stanza=dd info }
 Section "backup log, last 25" { docker compose logs --tail 25 backup }
 Section "restore drill"    { docker compose exec -T backup /backup/restore-drill.sh }
 

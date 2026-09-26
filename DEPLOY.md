@@ -108,7 +108,7 @@ exists; this shows whether it has:
 
 ```powershell
 docker compose logs --tail 20 postgres | Select-String archive
-docker compose exec backup pgbackrest --stanza=dd check
+docker compose exec backup sh /backup/pgbr.sh --stanza=dd check
 ```
 
 ## 5. Look at the site
@@ -151,7 +151,7 @@ only in `test_tokens.json` on your computer (it is in .gitignore). The seed
 deletes data with no undo, so run a backup first, then:
 
 ```powershell
-docker compose exec backup pgbackrest --stanza=dd --type=full backup
+docker compose exec backup sh /backup/pgbr.sh --stanza=dd --type=full backup
 docker compose cp launch_seed.sql postgres:/tmp/launch_seed.sql
 docker compose exec postgres psql -U vote -d vote -v ON_ERROR_STOP=1 -f /tmp/launch_seed.sql
 python make_test_tokens.py
