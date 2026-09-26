@@ -1,11 +1,12 @@
-# Decent Decision. Runs alongside the Lemmy stack on the same machine.
+# Decent Decision. Self-contained: its own database, backups and Cloudflare
+# tunnel, independent of anything else running on the machine.
 #
 #   docker compose up -d --build
 #
-# The API joins the Lemmy compose network so the cloudflared container that is
-# already running can reach it as http://decentdecision-api:8000. That means no
-# second tunnel, no second token, and nothing new opened on the router --
-# just one extra public hostname in the Cloudflare dashboard. See README.md.
+# The tunnel (the cloudflared service at the bottom) only starts when .env
+# has COMPOSE_PROFILES=public and DD_TUNNEL_TOKEN set, so the same file runs
+# a private local copy without it. It dials out to Cloudflare: nothing is
+# opened on the router or the firewall. See README.md.
 
 services:
   postgres:
@@ -106,13 +107,30 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Loopback only. Public traffic arrives through the existing tunnel,
-    # never through this port.
+    # Loopback only, for you. Public traffic arrives through the tunnel
+    # below, over the stack's own network, never through this port.
     ports:
       - "127.0.0.1:8100:8000"
-    networks:
-      - default
-      - lemmy
+
+  # The public way in: a Cloudflare tunnel of this site's own. In the Zero
+  # Trust dashboard its public hostname points at http://api:8000. It is the
+  # only thing besides you that can reach the api, which is what makes
+  # trusting its CF-Connecting-IP header for rate limits safe.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["public"]
+    restart: always
+    command: tunnel --no-autoupdate run
+    environment:
+      # A secret: whoever holds it can serve traffic as your tunnel.
+      - TUNNEL_TOKEN=${DD_TUNNEL_TOKEN:-}
+    depends_on:
+      - api
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 volumes:
   votedata:
@@ -120,9 +138,3 @@ volumes:
   backupspool:
   pgsocket:
 
-networks:
-  lemmy:
-    external: true
-    # `docker network ls` to confirm the name -- compose derives it from the
-    # Lemmy folder, so it is usually <foldername>_default.
-    name: lemmy_default

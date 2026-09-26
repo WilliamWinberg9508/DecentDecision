@@ -99,62 +99,57 @@ into your own client on your own machine.
 ## Keeping it private
 
 The API binds to `127.0.0.1:8100` and nothing else. Loopback only — not the
-LAN, not the internet. The single thing that ever made it public was the
-tunnel route, so removing that route is the whole job:
+LAN, not the internet. The single thing that makes it public is this stack's
+own Cloudflare tunnel (the `cloudflared` service), so taking it off the
+internet is one line in `.env`:
 
-Cloudflare dashboard → **Zero Trust → Networks → Tunnels** → your tunnel →
-**Public Hostnames** → the `decentdecision.com` row → **Delete**.
+```
+COMPOSE_PROFILES=
+```
 
-That removes the CNAME with it, and the domain stops resolving. The stack keeps
-running at **http://localhost:8100**, reachable only from this machine.
-
-Do **not** stop the `cloudflared` container to achieve this — it is shared with
-the Lemmy instance, and stopping it takes `legaliseramera.nu` down too.
-
-Belt and braces, if you want cloudflared unable to reach the API at all rather
-than merely not routed to it: comment out the `lemmy` entry under the api
-service's `networks:` in `docker-compose.yml` and `docker compose up -d`. Not
-required — with no route, nothing arrives.
-
-To publish again later, re-add the public hostname. Nothing else changes.
+then `docker compose up -d --remove-orphans`. The tunnel container stops, the
+site keeps running at **http://localhost:8100** for you alone. Put
+`COMPOSE_PROFILES=public` back and `docker compose up -d` to publish again.
+The Lemmy instance has its own tunnel and is not affected either way.
 
 ## Publishing it on decentdecision.com
 
-The tunnel you already have can carry a second domain — no second tunnel, no
-second token, nothing new on the router.
+The site has its own tunnel, separate from Lemmy's: its own token, its own
+container, nothing shared. The tunnel dials out to Cloudflare, so nothing is
+opened on the router or the firewall.
 
-**1. Move the domain's DNS to Cloudflare.** Registered at GoDaddy, so it starts
-on `ns11/ns12.domaincontrol.com`.
+**1. The domain is on Cloudflare.** (Done if Email Routing works.)
 
-- Cloudflare dashboard → **Add a site** → `decentdecision.com` → Free plan.
-  It has no records to import, which is the whole job done.
-- Cloudflare shows two nameservers. At GoDaddy: **My Products → Domains →
-  DNS → Nameservers → Change → I'll use my own** → paste both.
-- Wait for Cloudflare to mark the zone Active. A brand-new domain usually
-  takes minutes.
+**2. Create the tunnel.** Cloudflare dashboard → **Zero Trust → Networks →
+Tunnels → Create a tunnel** → **Cloudflared** → name it `decentdecision` →
+on the install screen pick **Docker**, and copy the long token after
+`--token` in the command it shows (don't run that command).
 
-No DNSSEC step here. A freshly registered domain has none published, which is
-the part that made the `.nu` migration slow.
+**3. Point it at the site.** Next screen, **Public hostname** (newer
+dashboards: **Published application routes**):
 
-**2. Start the stack.**
+- Subdomain: *(blank)* · Domain: `decentdecision.com` · Path: *(blank)*
+- Service: `HTTP` → `api:8000`
 
-```powershell
-cd "$env:USERPROFILE\Downloads\memes_ submit_files\decentdecision"
-docker network ls | Select-String lemmy    # confirm the network name
-docker compose up -d                       # first run builds the image
+Save. Cloudflare creates the DNS record. If it says a record already exists,
+delete the old A/AAAA/CNAME for `decentdecision.com` under **DNS → Records**
+(or the hostname on the Lemmy tunnel, if you added one there) and save again.
+Leave the MX and TXT email records alone.
+
+**4. Put the token in `.env`** and switch the tunnel on:
+
+```
+COMPOSE_PROFILES=public
+DD_TUNNEL_TOKEN=<the token>
 ```
 
-If the network is not `lemmy_default`, correct `networks.lemmy.name` in
-`docker-compose.yml` before starting.
+```powershell
+docker compose up -d
+docker compose logs --tail 20 cloudflared    # expect "Registered tunnel connection"
+```
 
-**3. Point the tunnel at it.** Cloudflare dashboard → **Zero Trust → Networks
-→ Tunnels** → your existing tunnel → **Public Hostnames** → **Add**:
-
-- Subdomain: *(blank)* · Domain: `decentdecision.com`
-- Service: `HTTP` → `decentdecision-api:8000`
-
-DNS is created for you. `legaliseramera.nu` is untouched and keeps serving
-Lemmy through the same tunnel.
+The tunnel shows **Healthy** in the dashboard within a minute and the site
+answers at https://decentdecision.com.
 
 ## Using it
 

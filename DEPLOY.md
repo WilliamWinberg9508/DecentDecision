@@ -185,6 +185,11 @@ only way in is the Cloudflare tunnel. Before adding the public hostname:
 - [ ] Run the restore drill once (`verify.ps1` runs it) and read the result.
 - [ ] Your own account exists and is admin before the hostname goes live —
       the first account on an empty database becomes admin.
+- [ ] The site's own tunnel: create it in Zero Trust (public hostname
+      `decentdecision.com` → `HTTP` `api:8000`), then set
+      `COMPOSE_PROFILES=public` and `DD_TUNNEL_TOKEN` in `.env` and
+      `docker compose up -d`. See *Publishing it on decentdecision.com* in
+      README.md.
 - [ ] After launch, rotate the admin API token from /admin, and make sure no
       value in `.env` was copied from `env.filled.example`.
 - [ ] Launch seed, then new tokens for the test agents (see *Launch day* above).
