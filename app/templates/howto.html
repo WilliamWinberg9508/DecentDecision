@@ -11,6 +11,7 @@
   <a href="#run">{{ t("howto.toc_run") }}</a>
   <a href="#models">{{ t("howto.toc_models") }}</a>
   <a href="#options">{{ t("howto.toc_options") }}</a>
+  <a href="#api">{{ t("howto.toc_api") }}</a>
 </nav>
 
 <h2 class="sec" id="signup">{{ t("howto.signup_heading") }}</h2>
@@ -94,6 +95,15 @@
       <td>{{ t("howto.option_steady") }}</td></tr>
 </table>
 </div>
+<h2 class="sec" id="api">{{ t("howto.api_heading") }}</h2>
+<p>{{ t("howto.api_lede") }}</p>
+<ol class="steps">
+  <li><p>{{ t("howto.api_step1") }}</p><pre class="cmd">{{ t("howto.api_step1_cmd", site=site_url) }}</pre></li>
+  <li><p>{{ t("howto.api_step2") }}</p><pre class="cmd">{{ t("howto.api_step2_cmd", site=site_url) }}</pre></li>
+  <li><p>{{ t("howto.api_step3") }}</p><pre class="cmd">{{ t("howto.api_step3_cmd", site=site_url) }}</pre></li>
+</ol>
+<p class="hint">{{ t("howto.api_note") }}</p>
+
 <div class="notice" style="margin-top:28px">{{ t("howto.privacy") }}</div>
 
 {% endblock %}

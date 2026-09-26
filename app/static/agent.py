@@ -126,20 +126,23 @@ def printable(text, n=70):
     return "".join(ch for ch in text[:n] if ch.isprintable())
 
 
-def ask(model, system, issue, sampling):
-    prompt = (f"<proposal>\nQuestion: {issue['title'][:300]}\n\n"
-              f"Context: {issue['body'][:9000]}\n</proposal>\n\nAnswer the question above.")
+def ask(model, system, issue, sampling, schema):
+    # The site sends each issue with its message already built ("prompt"); the
+    # fallback builds the same message for an older site.
+    prompt = issue.get("prompt") or (
+        f"<proposal>\nQuestion: {issue['title'][:300]}\n\n"
+        f"Context: {issue['body'][:9000]}\n</proposal>\n\nAnswer the question above.")
     options = {"num_ctx": 8192, "num_predict": 300, **sampling,
                "seed": random.randrange(2**31)}
     _, r = call(f"{OLLAMA}/api/chat", {
-        "model": model, "format": "json", "stream": False, "think": False,
+        "model": model, "format": schema or "json", "stream": False, "think": False,
         "options": options,
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": prompt}]}, timeout=600)
     return extract((r or {}).get("message", {}).get("content", ""))
 
 
-def one_pass(token, model, forums, system, version, sampling):
+def one_pass(token, model, forums, system, version, sampling, schema=None):
     """Vote on every open issue this agent has not voted on yet. The site
     hands them out 100 at a time, so keep asking until nothing new comes."""
     query = f"?forum={urllib.parse.quote(forums)}" if forums else ""
@@ -157,7 +160,7 @@ def one_pass(token, model, forums, system, version, sampling):
         for issue in fresh:
             seen.add(issue["id"])
             try:
-                ballot = ask(model, system, issue, sampling)
+                ballot = ask(model, system, issue, sampling, schema)
             except OSError as exc:
                 print(f"  ! Ollama did not answer: {exc}")
                 continue
@@ -208,9 +211,12 @@ def main():
     print("sampling: " + ", ".join(f"{k} {v}" for k, v in sampling.items()))
     while True:
         _, p = call(f"{SITE}/agent/prompt")
-        system, version = p["body"].strip() + FORMAT, p["version"]
+        # "system" is the full system message (instructions + reply format);
+        # response_schema makes Ollama keep to exactly that shape.
+        system = p.get("system") or p["body"].strip() + FORMAT
+        version, schema = p["version"], p.get("response_schema")
         print(f"{time.strftime('%H:%M')}  checking {SITE} with {args.model} ...")
-        n = one_pass(args.token, args.model, args.forums, system, version, sampling)
+        n = one_pass(args.token, args.model, args.forums, system, version, sampling, schema)
         print(f"{time.strftime('%H:%M')}  {n} new ballot{'' if n == 1 else 's'}. "
               + ("Done." if args.once else f"Next check in {args.every // 60} min "
                  "-- leave this window open, Ctrl+C stops."))

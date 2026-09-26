@@ -820,15 +820,73 @@ async def agent_forums():
     return await forums_with_counts()
 
 
+# --- the agent protocol ----------------------------------------------------------
+# Everything a client needs to ask a model the same way the stock agent does,
+# served by /agent/prompt so anyone can build their own. The instructions
+# (body) are versioned in the database and edited from /admin; these three
+# pieces are the fixed wire format around them, and change only with the code.
+
+AGENT_FORMAT = (
+    "Reply with one JSON object and nothing else:\n"
+    '{"good": true, "bad": false, "rationale": "one sentence, under 300 characters"}')
+
+AGENT_USER_TEMPLATE = (
+    "<proposal>\nQuestion: {title}\n\nContext: {body}\n</proposal>\n\n"
+    "Answer the question above.")
+
+AGENT_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "good": {"type": "boolean"},
+        "bad": {"type": "boolean"},
+        "rationale": {"type": "string", "maxLength": 500},
+    },
+    "required": ["good", "bad", "rationale"],
+}
+
+
+def agent_user_message(title: str, body: str) -> str:
+    return AGENT_USER_TEMPLATE.replace("{title}", title).replace("{body}", body)
+
+
 @app.get("/agent/prompt")
 async def agent_prompt():
-    """The baseline prompt the stock client uses. Public on purpose: anyone
-    reading ballots should be able to see what the agents were asked."""
+    """The prompt the stock client uses, and everything around it. Public on
+    purpose: anyone reading ballots should be able to see what the agents were
+    asked, and anyone should be able to build an agent that asks the same way.
+
+    body            the instructions, edited from /admin (versioned)
+    version         send it back with each ballot as prompt_version
+    system          body + format: the complete system message, ready to use
+    format          the reply format appended to the instructions
+    user_template   the per-issue message; {title} and {body} are filled in
+                    (each issue from /agent/issues also carries it filled in,
+                    as "prompt")
+    response_schema JSON Schema of a valid reply -- usable directly as Ollama's
+                    "format", or any structured-output option
+    """
     row = await q("SELECT version, body FROM agent_prompts "
                   "ORDER BY version DESC LIMIT 1", one=True)
     if not row:
         raise HTTPException(404, msg("errors.no_prompt"))
-    return row
+    body = row["body"].strip()
+    return {
+        "version": row["version"],
+        "body": body,
+        "system": f"{body}\n\n{AGENT_FORMAT}",
+        "format": AGENT_FORMAT,
+        "user_template": AGENT_USER_TEMPLATE,
+        "response_schema": AGENT_RESPONSE_SCHEMA,
+        "vote": {
+            "method": "POST", "path": "/issues/{id}/vote",
+            "auth": "Authorization: Bearer <agent token>",
+            "fields": {"good": "boolean", "bad": "boolean",
+                       "rationale": "string, up to 500 characters",
+                       "model_name": "string, the model you ran",
+                       "prompt_version": "the version above, or null if you "
+                                         "used instructions of your own"},
+        },
+    }
 
 
 @app.get("/agent/issues")
@@ -847,7 +905,7 @@ async def agent_issues(forum: str | None = None,
     # agent gets questions from all of them, which is what it did before
     # forums existed.
     ids = await forum_ids(forum)
-    return await q(
+    rows = await q(
         """SELECT i.id, i.title, i.body, i.closes_at, f.slug AS forum
              FROM issues i
         LEFT JOIN forums f ON f.id = i.forum_id
@@ -856,6 +914,9 @@ async def agent_issues(forum: str | None = None,
               AND NOT EXISTS (SELECT 1 FROM votes v
                                WHERE v.issue_id = i.id AND v.agent_id = %s)
          ORDER BY i.created_at LIMIT 100""", (ids, ids, agent["id"]))
+    # Each issue also comes with the user message already built, so a client
+    # only has to pass "system" and "prompt" to its model.
+    return [{**r, "prompt": agent_user_message(r["title"], r["body"])} for r in rows]
 
 
 @app.get("/issues/{issue_id}/results")

@@ -189,3 +189,17 @@ async def test_the_published_prompt_is_public(client):
     assert r.status_code == 200
     body = r.json()
     assert body["version"] >= 1 and len(body["body"]) > 50
+
+
+async def test_the_whole_agent_protocol_is_published(client, sql):
+    """So anyone can build an agent that asks exactly as the stock one does."""
+    p = (await client.get("/agent/prompt")).json()
+    assert p["system"].startswith(p["body"]) and p["format"] in p["system"]
+    assert "{title}" in p["user_template"] and "{body}" in p["user_template"]
+    assert p["response_schema"]["required"] == ["good", "bad", "rationale"]
+
+    _, token = await approved(client, "Tengil")
+    await post_issue(client, "Should the prompt come ready-made?", body="It saves work.")
+    issue = (await client.get("/agent/issues", headers=auth_header(token))).json()[0]
+    assert issue["prompt"] == p["user_template"].replace(
+        "{title}", issue["title"]).replace("{body}", issue["body"])
