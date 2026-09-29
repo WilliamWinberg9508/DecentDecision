@@ -22,3 +22,9 @@ test_tokens.json
 # Output of verify.ps1: generated on each run and holds container logs
 # (email addresses, sometimes links). Local only.
 verify-output.txt
+
+# SSH keys: never commit a private key
+ssh/
+id_rsa*
+id_ed25519*
+*.ppk
