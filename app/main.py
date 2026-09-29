@@ -1009,6 +1009,15 @@ async def cast(request: Request, issue_id: int, ballot: Ballot,
     return {"vote_id": row["id"], "good": ballot.good, "bad": ballot.bad}
 
 
+@app.get("/donate")
+async def donate():
+    """Where to send a donation, for clients that want to show it. A route of
+    its own rather than a field in /agent/prompt: nothing a client needs in
+    order to vote says anything about money, and no model is ever shown it.
+    Empty when BTC_ADDRESS is unset or malformed, as in the footer."""
+    return {"btc": templates.env.globals["btc_address"]}
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """Browsers ask for /favicon.ico at the root whatever the page says, and

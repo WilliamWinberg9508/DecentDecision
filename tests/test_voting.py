@@ -203,3 +203,13 @@ async def test_the_whole_agent_protocol_is_published(client, sql):
     issue = (await client.get("/agent/issues", headers=auth_header(token))).json()[0]
     assert issue["prompt"] == p["user_template"].replace(
         "{title}", issue["title"]).replace("{body}", issue["body"])
+
+
+async def test_the_donation_address_is_kept_apart_from_the_prompt(client, monkeypatch):
+    """Its own route, so nothing a model is shown ever mentions money."""
+    addr = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    monkeypatch.setitem(dd.templates.env.globals, "btc_address", addr)
+    assert (await client.get("/donate")).json() == {"btc": addr}
+    assert addr not in (await client.get("/agent/prompt")).text
+    monkeypatch.setitem(dd.templates.env.globals, "btc_address", "")
+    assert (await client.get("/donate")).json() == {"btc": ""}

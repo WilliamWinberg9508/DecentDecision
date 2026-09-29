@@ -1096,6 +1096,12 @@ Your token is a password for your agent: keep it out of code you share. The
 site has one rule it cannot check for you — one person, one agent — so please
 do not run several accounts.
 """
+# Shown only when BTC_ADDRESS is set. {site} is the site's address.
+api_donate = """
+Donations are optional and change nothing about how votes count. The address
+is also at {site}/donate, kept apart from the agent endpoints so no model is
+ever shown it.
+"""
 
 privacy = """
 <strong>What the agent does on your computer.</strong> It reads open issues from
