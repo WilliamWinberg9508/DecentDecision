@@ -641,16 +641,31 @@ def mail_later(to: str, subject: str, body: str) -> None:
     task.add_done_callback(_mail_tasks.discard)
 
 
-async def issue_verification(user_id: int) -> str:
+_RESEND_PAUSE = 0.6          # seconds between emails in a bulk send (relay rate limits)
+
+
+def mail_batch(items: list[tuple[str, str, str]]) -> None:
+    """Send several emails in the background, one after another with a short
+    pause: mail relays refuse a burst, and a bulk resend should not be one."""
+    async def run():
+        for to, subject, body in items:
+            await run_in_threadpool(send_mail, to, subject, body)
+            await asyncio.sleep(_RESEND_PAUSE)
+    task = asyncio.create_task(run())
+    _mail_tasks.add(task)
+    task.add_done_callback(_mail_tasks.discard)
+
+
+async def issue_verification(user_id: int, send: bool = True) -> str:
     """Mint a verification link. Sends it if SMTP is configured; otherwise the
     admin page shows it, so the mechanism works either way and the claim it
     supports -- somebody holding that address clicked this -- is the same."""
     token = secrets.token_urlsafe(24)
-    await q("UPDATE users SET verify_token_hash = %s WHERE id = %s",
-            (_hash(token), user_id))
+    await q("UPDATE users SET verify_token_hash = %s, verify_sent_at = now() "
+            "WHERE id = %s", (_hash(token), user_id))
     link = f"{SITE_URL}/verify/{token}"
 
-    if SMTP_HOST:
+    if SMTP_HOST and send:
         row = await q("SELECT email FROM users WHERE id = %s", (user_id,), one=True)
         mail_later(row["email"], msg("email.verify_subject"),
                    msg("email.verify_body", link=link) + "\n")
@@ -1976,12 +1991,15 @@ async def _admin_page(request: Request, admin: dict, done: str | None = None,
     log = await q("SELECT at, actor, action, target, detail FROM audit_log "
                   "ORDER BY at DESC LIMIT 40")
     forums = await forums_with_counts()
+    unverified = (await q("SELECT count(*) AS n FROM users WHERE NOT email_verified "
+                          "AND email NOT LIKE %s", ("%@dd.test",), one=True))["n"]
 
     return render(request, "admin.html", {
         "user": admin, "pending": pending, "members": members, "done": done,
         "prompt": prompt, "usage": usage, "log": log, "forums": forums,
         "fresh_admin_token": fresh_admin_token,
         "env_token_live": not await config_get("admin_token_hash"),
+        "unverified": unverified,
         "smtp": bool(SMTP_HOST), "site_url": SITE_URL})
 
 
@@ -2005,6 +2023,36 @@ async def page_verify_link(request: Request, user_id: int = Form(...),
     link = await issue_verification(user_id)
     await audit(admin, "email.verification.reissue", f"user {user_id}")
     return await _admin_page(request, admin, done="verify:" + link)
+
+
+RESEND_ALL_LIMIT = 200
+
+
+@app.post("/admin/resend-all-verifications", response_class=HTMLResponse)
+async def page_resend_all(request: Request, csrf: str = Form("")):
+    """Email a fresh confirmation link to every account that has not confirmed
+    yet (the five @dd.test test accounts excepted). Each gets a new link, which
+    replaces the old one. Anyone who was sent one in the last hour is skipped,
+    so a second click carries on with the rest (at most RESEND_ALL_LIMIT per
+    click) instead of mailing the same people twice."""
+    check_csrf(request, csrf)
+    admin = await require_web_admin(request)
+    if not admin:
+        raise HTTPException(404, msg("errors.not_found"))
+    if not SMTP_HOST:
+        return await _admin_page(request, admin, done="no-mail")
+    people = await q("SELECT id, email FROM users WHERE NOT email_verified "
+                     "AND email NOT LIKE %s AND (verify_sent_at IS NULL "
+                     "OR verify_sent_at < now() - interval '1 hour') "
+                     "ORDER BY id LIMIT %s", ("%@dd.test", RESEND_ALL_LIMIT))
+    items = []
+    for p in people:
+        link = await issue_verification(p["id"], send=False)
+        items.append((p["email"], msg("email.verify_subject"),
+                      msg("email.verify_body", link=link) + "\n"))
+    mail_batch(items)
+    await audit(admin, "email.verification.reissue.all", f"{len(items)} users")
+    return await _admin_page(request, admin, done=f"resent-all:{len(items)}")
 
 
 @app.post("/admin/approve")
@@ -2094,13 +2142,14 @@ async def page_rotate_admin_token(request: Request, csrf: str = Form("")):
 
 # --- account -----------------------------------------------------------------
 
-async def _account_page(request: Request, user: dict, fresh_token: str = ""):
+async def _account_page(request: Request, user: dict, fresh_token: str = "",
+                        notice: str = "", status_code: int = 200):
     agent = await q("SELECT * FROM agents WHERE user_id = %s", (user["id"],), one=True)
     voted = await q("SELECT count(*) AS n FROM votes WHERE agent_id = %s",
                     (agent["id"],), one=True) if agent else {"n": 0}
     return render(request, "account.html", {
         "user": user, "agent": agent, "voted": voted["n"],
-        "fresh_token": fresh_token})
+        "fresh_token": fresh_token, "notice": notice}, status_code)
 
 
 @app.get("/account", response_class=HTMLResponse)
@@ -2109,6 +2158,37 @@ async def page_account(request: Request):
     if not user:
         return RedirectResponse("/login", status_code=303)
     return await _account_page(request, user)
+
+
+RESEND_COOLDOWN = 120          # seconds before a confirmation email can be sent again
+
+
+@app.post("/account/resend-verification", response_class=HTMLResponse)
+async def page_resend_verification(request: Request, csrf: str = Form("")):
+    """Send the confirmation email again, to the address on the account only.
+    Limited to once per RESEND_COOLDOWN seconds, so the button cannot be used
+    to fill someone's inbox -- including your own."""
+    check_csrf(request, csrf)
+    user = await session_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user["email_verified"]:
+        return RedirectResponse("/account", status_code=303)
+    if not SMTP_HOST:
+        return await _account_page(request, user, notice="no_mail")
+    # The cooldown is decided by this one statement, so two quick clicks
+    # cannot both pass.
+    ok = await q(
+        """UPDATE users SET verify_sent_at = now()
+            WHERE id = %s AND NOT email_verified
+              AND (verify_sent_at IS NULL
+                   OR verify_sent_at < now() - make_interval(secs => %s))
+        RETURNING id""", (user["id"], RESEND_COOLDOWN), one=True)
+    if not ok:
+        return await _account_page(request, user, notice="wait", status_code=429)
+    await issue_verification(user["id"])
+    await audit(user, "email.verification.resend", f"user {user['id']}")
+    return await _account_page(request, user, notice="sent")
 
 
 @app.post("/account/token", response_class=HTMLResponse)

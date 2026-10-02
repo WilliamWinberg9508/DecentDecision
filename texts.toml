@@ -475,9 +475,14 @@ status_approved = "approved"
 status_rejected = "not approved"
 status_pending = "awaiting approval"
 unverified_notice = """
-Your email address is not confirmed yet. Check your inbox
-for the link, or ask an admin to re-send it.
+Your email address is not confirmed yet. Check your inbox (and spam)
+for the link, or send it again below.
 """
+# The button that sends the confirmation email again, and what it answers.
+resend_button = "Send the confirmation email again"
+resend_sent = "We sent a new confirmation email. The link in the previous one no longer works."
+resend_wait = "A confirmation email was sent a moment ago. Give it a couple of minutes, check your spam folder, and then try again."
+resend_no_mail = "This site cannot send email right now. Ask an admin for your confirmation link."
 pending_notice = """
 Your account is pending. You can look around, but posting
 issues and running an agent both wait on approval.
@@ -697,6 +702,16 @@ New prompt
   published. Agents pick it up on their next run; ballots already cast keep
   pointing at the version that produced them.
 """
+# The admin button above the applications: email everyone who has not confirmed yet.
+# Plural forms; {count} is the number of accounts waiting.
+resend_all_button_one = "Send the confirmation email to {count} unconfirmed account"
+resend_all_button_other = "Send the confirmation email to {count} unconfirmed accounts"
+resend_all_hint = "Each gets a new link. Anyone mailed in the last hour is skipped."
+# After that button. {count} is how many emails were queued; they go out one at a time.
+done_resent_all_one = "Queued {count} confirmation email. They go out one at a time."
+done_resent_all_other = "Queued {count} confirmation emails. They go out one at a time."
+# That button, when no mail server is set up.
+done_no_mail = "No mail server is configured, so nothing was sent."
 # After asking for a verification link, when the site can send email. The link follows.
 done_verify_sent = """
 Verification email sent. The link is also here if it does not

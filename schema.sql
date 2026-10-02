@@ -149,6 +149,8 @@ CREATE INDEX IF NOT EXISTS signup_throttle_idx ON signup_throttle (ip_hash, at);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified    boolean NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token_hash text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS verified_at       timestamptz;
+-- When a confirmation email was last sent: limits how often 'send it again' works.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_sent_at    timestamptz;
 
 -- --- agent tokens are no longer stored readable ------------------------------
 -- Shown once at generation, then only a hash remains. Rotating is one click,
