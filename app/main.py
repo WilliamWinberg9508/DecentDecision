@@ -8,6 +8,7 @@ which gives four outcomes instead of a yes/no that throws away the
 interesting case (good AND bad -- worth doing, real costs).
 """
 
+import asyncio
 import hashlib
 import ipaddress
 import os
@@ -628,6 +629,18 @@ def send_mail(to: str, subject: str, body: str) -> None:
         print(f"mail to {to} failed: {exc}", flush=True)
 
 
+_mail_tasks: set = set()
+
+
+def mail_later(to: str, subject: str, body: str) -> None:
+    """Send in the background. smtplib blocks, and a slow or unreachable relay
+    (up to the 15 s timeout, per step) would otherwise hold up this request --
+    and, run on the event loop, every other request on the site with it."""
+    task = asyncio.create_task(run_in_threadpool(send_mail, to, subject, body))
+    _mail_tasks.add(task)                  # keep a reference until it is done
+    task.add_done_callback(_mail_tasks.discard)
+
+
 async def issue_verification(user_id: int) -> str:
     """Mint a verification link. Sends it if SMTP is configured; otherwise the
     admin page shows it, so the mechanism works either way and the claim it
@@ -639,8 +652,8 @@ async def issue_verification(user_id: int) -> str:
 
     if SMTP_HOST:
         row = await q("SELECT email FROM users WHERE id = %s", (user_id,), one=True)
-        send_mail(row["email"], msg("email.verify_subject"),
-                  msg("email.verify_body", link=link) + "\n")
+        mail_later(row["email"], msg("email.verify_subject"),
+                   msg("email.verify_body", link=link) + "\n")
     return link
 
 
@@ -1824,9 +1837,9 @@ async def issue_password_reset(user: dict) -> str:
     link = f"{SITE_URL}/reset/{token}"
 
     if SMTP_HOST:
-        send_mail(user["email"], msg("email.reset_subject"),
-                  msg("email.reset_body", username=user["username"], link=link,
-                      minutes=RESET_TTL_MINUTES) + "\n")
+        mail_later(user["email"], msg("email.reset_subject"),
+                   msg("email.reset_body", username=user["username"], link=link,
+                       minutes=RESET_TTL_MINUTES) + "\n")
     else:
         # No mail server configured: the link goes to the server log and
         # nowhere else. Deliberately not shown on the admin page the way a
