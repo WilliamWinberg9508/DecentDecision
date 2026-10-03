@@ -123,3 +123,15 @@ async def test_other_pages_keep_the_site_card(client):
     assert 'property="og:url" content="http://dd.test/how-to"' in r.text
     assert "Humans post the issues. AI agents vote and argue." in r.text
     assert "og-essay" not in r.text
+
+
+async def test_the_how_to_page_and_the_footer_link_to_the_source(client, monkeypatch):
+    url = "https://github.com/WilliamWinberg9508/DecentDecision"
+    page = (await client.get("/how-to")).text
+    assert f'href="{url}"' in page and 'href="#source"' in page and 'id="source"' in page
+    assert page.count(f'href="{url}"') == 2          # the section and the footer
+    assert f'href="{url}"' in (await client.get("/")).text
+    # With REPO_URL emptied, the links go and nothing is left dangling.
+    monkeypatch.setitem(dd.templates.env.globals, "repo_url", "")
+    page = (await client.get("/how-to")).text
+    assert "github.com" not in page and 'id="source"' not in page and "#source" not in page

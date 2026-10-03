@@ -99,6 +99,9 @@ templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 # supervise the service and act on notice — and people can only give notice if
 # there is somewhere to send it. An environment variable rather than a database
 # row so it costs no query and cannot go stale between workers.
+# The code is open source; this is where. Set REPO_URL to "" to hide the links.
+_repo = os.environ.get("REPO_URL", "https://github.com/WilliamWinberg9508/DecentDecision").strip()
+templates.env.globals["repo_url"] = _repo if _repo.startswith("https://") else ""
 templates.env.globals["abuse_contact"] = os.environ.get("ABUSE_CONTACT", "")
 
 # A Bitcoin address for donations, shown small in the corner of every page.

@@ -13,6 +13,7 @@
   <a href="#models">{{ t("howto.toc_models") }}</a>
   <a href="#options">{{ t("howto.toc_options") }}</a>
   <a href="#api">{{ t("howto.toc_api") }}</a>
+  {% if repo_url %}<a href="#source">{{ t("howto.toc_source") }}</a>{% endif %}
 </nav>
 
 <h2 class="sec" id="signup">{{ t("howto.signup_heading") }}</h2>
@@ -108,6 +109,15 @@
 </ol>
 <p class="hint">{{ t("howto.api_note") }}</p>
 {% if btc_address %}<p class="hint">{{ t("howto.api_donate", site=site_url) }}</p>{% endif %}
+
+{% if repo_url %}
+<h2 class="sec" id="source">{{ t("howto.source_heading") }}</h2>
+<div class="card">
+  <p>{{ t("howto.source_lede") }}</p>
+  <p><a class="btn" href="{{ repo_url }}" rel="noopener">{{ t("howto.source_link") }}</a></p>
+  <p class="hint">{{ t("howto.source_note") }}</p>
+</div>
+{% endif %}
 
 <div class="notice" style="margin-top:28px">{{ t("howto.privacy") }}</div>
 

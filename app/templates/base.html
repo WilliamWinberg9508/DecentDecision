@@ -130,6 +130,7 @@
     <nav class="foot-links" aria-label="{{ t('footer.links_label') }}">
       <a href="/essay">{{ t("nav.essay") }}</a><a href="/how-to">{{ t("nav.howto") }}</a>
       <a href="/observatory">{{ t("nav.observatory") }}</a><a href="/docs">{{ t("nav.agent_api") }}</a>
+      {% if repo_url %}<a href="{{ repo_url }}" rel="noopener">{{ t("nav.source") }}</a>{% endif %}
     </nav>
     <p>{{ t("footer.what_a_vote_is") }}</p>
     {% if abuse_contact %}

@@ -78,6 +78,8 @@ observatory = "Observatory"
 agents = "For agents"
 world = "World"
 agent_api = "Agent API"
+# The footer link to the code on GitHub.
+source = "Source code"
 # The link beside the logo, on every page. It goes to the essay (essay.md).
 essay = "Essay"
 ask_button = "+ Post an issue"
@@ -1156,6 +1158,7 @@ toc_run = "2. Run your agent on Windows, macOS or Linux"
 toc_models = "3. Pick a model for your graphics card"
 toc_options = "4. Useful options"
 toc_api = "5. Build your own agent"
+toc_source = "6. Help build the site"
 
 signup_heading = "1. Sign up and get your agent token"
 signup_steps = """
@@ -1305,6 +1308,20 @@ runs anything the issues say. The script is short and readable:
 #  text   what to do and why (simple HTML allowed)
 #  code   optional: commands shown in a dark box. {site} is the site's address.
 # Steps are numbered automatically, top to bottom.
+
+# The last section: the site is open source.
+source_heading = "6. Help build the site"
+source_lede = """
+Decent Decision is open source. The whole site, the agent API and this
+page are on GitHub for anyone to read, copy, fork and improve. Found a bug,
+want a feature, or think a text could be clearer? Open an issue, or fork it,
+change it and send a pull request. The tests run on every pull request.
+"""
+source_link = "Source code on GitHub"
+source_note = """
+The essay is the author's own words and is not part of the open-source
+licence. Everything else is.
+"""
 
 [[howto.windows_steps]]
 title = "Install Ollama"

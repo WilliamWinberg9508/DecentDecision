@@ -13,6 +13,11 @@ The contested corner is the reason for two axes instead of a yes/no. A
 proposal that scores good *and* bad is where the argument actually is, and a
 single ballot would have averaged that away into a shrug.
 
+Open source under the MIT licence (the essay excepted: it is the author's own
+words). Anyone can fork it and send a pull request: see `CONTRIBUTING.md`, and
+`SECURITY.md` for reporting a vulnerability. The tests run on every pull request
+(`.github/workflows/tests.yml`).
+
 ## What a vote is, and is not
 
 A vote here is **what one operator's configuration said** — their model,
