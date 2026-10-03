@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=t("edit_issue.title")) }}{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+
+<p class="crumbs"><a href="/i/{{ issue.id }}">{{ t("edit_issue.back") }}</a></p>
+<h1>{{ t("edit_issue.title") }}</h1>
+{% if issue.kind == 'thread' %}
+  <p class="lede">{{ t("edit_issue.lede_thread") }}</p>
+{% else %}
+  <p class="lede">{{ t("edit_issue.lede") }}</p>
+  <div class="notice warn">
+    <strong>{{ t("edit_issue.warning_title") }}</strong>
+    {% if issue.ballots %}{{ tn("edit_issue.warning", issue.ballots) }}{% else %}{{ t("edit_issue.warning_none") }}{% endif %}
+  </div>
+{% endif %}
+
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+
+<form class="card" method="post" action="/i/{{ issue.id }}/edit">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+{% if issue.kind != 'thread' %}
+  <label for="forum">{{ t("new_question.forum_label") }}</label>
+  <select id="forum" name="forum" required>
+    <option value="" {{ 'selected' if not form.forum }} disabled>{{ t("new_question.forum_choose") }}</option>
+    {% for f in forums %}
+      <option value="{{ f.slug }}" {{ 'selected' if form.forum == f.slug }}>{{ f.name }}</option>
+    {% endfor %}
+  </select>
+  <div class="hint">{{ t("new_question.forum_hint") }}</div>
+
+{% endif %}
+  <label for="title">{{ t("new_question.title_label") }}</label>
+  {% if issue.kind == 'thread' %}
+  <input id="title" name="title" maxlength="200" required minlength="5"
+         value="{{ form.title or '' }}" placeholder="{{ t("thread_new.title_placeholder") }}">
+  {% else %}
+  <input id="title" name="title" maxlength="200" required minlength="10"
+         pattern=".*\?\s*" value="{{ form.title or '' }}"
+         title="{{ t("new_question.title_tooltip") }}"
+         placeholder="{{ t("new_question.title_placeholder") }}">
+  <div class="hint">{{ t("new_question.title_hint") }}</div>
+  {% endif %}
+
+  <label for="body">{{ t("new_question.body_label") }}</label>
+  <textarea id="body" name="body" maxlength="8000"
+            placeholder="{{ t("new_question.body_placeholder") }}">{{ form.body or '' }}</textarea>
+  <div class="hint">{{ t("new_question.body_hint") }}</div>
+
+{% if issue.kind != 'thread' %}
+  <label for="url">{{ t("new_question.url_label") }}</label>
+  <input id="url" name="url" type="url" maxlength="2000" inputmode="url" autocomplete="off"
+         value="{{ form.url or '' }}" placeholder="{{ t("new_question.url_placeholder") }}">
+  <div class="hint">{{ t("new_question.url_hint") }}</div>
+
+  <label for="days_open">{{ t("edit_issue.days_label") }}</label>
+  <select id="days_open" name="days_open">
+    <option value="3">{{ tn("new_question.days", 3) }}</option>
+    <option value="7" {{ 'selected' if form.days_open|int == 7 }}>{{ tn("new_question.days", 7) }}</option>
+    <option value="14">{{ tn("new_question.days", 14) }}</option>
+    <option value="30">{{ tn("new_question.days", 30) }}</option>
+  </select>
+
+{% endif %}
+  <button type="submit">{{ t("edit_issue.submit") }}</button>
+  <a class="btn ghost" href="/i/{{ issue.id }}">{{ t("edit_issue.cancel") }}</a>
+</form>
+
+{% endblock %}

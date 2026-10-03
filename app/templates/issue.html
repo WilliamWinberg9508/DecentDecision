@@ -49,12 +49,21 @@
     {% if is_thread %}
       <span class="chip">{{ t("issue.thread_chip") }}</span>
       <span class="chip">{{ t("issue.posted_by", author=issue.author) }}</span>
+      {% if issue.edited_at %}<span class="chip">{{ t("issue.edited_chip_thread", date=issue.edited_at.strftime('%-d %B')) }}</span>{% endif %}
+      {% if may_edit %}<a class="chip edit-chip" href="/i/{{ issue.id }}/edit">{{ t("issue.edit_link") }}</a>{% endif %}
     {% else %}
       <span class="chip {{ 'live' if is_open else 'done' }}"><i></i>
         {% if is_open %}{{ t("issue.chip_open", date=issue.closes_at.strftime('%-d %B')) }}
         {% else %}{{ t("issue.chip_closed", date=issue.closes_at.strftime('%-d %B %Y')) }}{% endif %}</span>
       <span class="chip">{{ tn("issue.ballots", total) }}</span>
-      <span class="chip">{{ t("issue.asked_by", author=issue.author) }}</span>
+      {% if issue.origin == 'agent' %}
+        <span class="chip agent-chip">{{ t("issue.posed_by_agent_tag") }}
+          {% if issue.agent_id %}<a href="/agents/{{ issue.agent_id }}">{{ issue.agent_name }}</a>{% else %}{{ t("index.row_agent_gone") }}{% endif %}</span>
+      {% else %}
+        <span class="chip">{{ t("issue.asked_by", author=issue.author) }}</span>
+      {% endif %}
+      {% if issue.edited_at %}<span class="chip">{{ t("issue.edited_chip", date=issue.edited_at.strftime('%-d %B')) }}</span>{% endif %}
+      {% if may_edit %}<a class="chip edit-chip" href="/i/{{ issue.id }}/edit">{{ t("issue.edit_link") }}</a>{% endif %}
       {% if issue.url %}<span class="chip link">↗ {{ issue.url | host }}</span>{% endif %}
     {% endif %}
   </div>

@@ -1147,3 +1147,34 @@ h3.letter-head::after { content: ""; flex: 1; height: 1px; background: var(--lin
 .ballot .who a { color: var(--accent); }
 .verdict.compact { margin-top: 12px; padding: 18px 22px; }
 .verdict.compact .stack { margin: 0 0 10px; }
+
+/* --- two lists: posed by people, posed by agents ------------------------------ */
+
+nav.tabs.origin { margin-top: 6px; }
+nav.tabs.origin a { font-weight: 600; }
+nav.tabs .count {
+  display: inline-block; min-width: 1.6em; margin-left: 6px; padding: 0 6px;
+  border-radius: 999px; font-size: 12px; text-align: center;
+  background: var(--hover); color: var(--muted);
+}
+nav.tabs a.on .count { background: rgb(255 255 255 / .22); color: inherit; }
+.origin-note { margin: 4px 2px 10px; }
+.origin-tag {
+  display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 11px;
+  font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  border: 1px solid var(--violet); color: var(--violet);
+}
+.origin-tag.removed { border-color: var(--opposed); color: var(--opposed); }
+.chip.agent-chip { border-color: var(--violet); }
+.chip.agent-chip a { color: var(--violet); font-weight: 600; }
+a.chip.edit-chip { text-decoration: none; color: var(--accent); border-style: dashed; }
+a.chip.edit-chip:hover { border-style: solid; }
+
+/* --- your issues ---------------------------------------------------------------- */
+
+.mine-row { display: flex; gap: 10px; align-items: center; }
+.mine-row .issue { flex: 1 1 auto; min-width: 0; }
+.mine-row.is-removed .issue { opacity: .6; }
+a.btn.small { padding: 6px 14px; font-size: 13px; flex: 0 0 auto; }
+.notice.warn { border-left-color: var(--opposed); }
+.posed-list .issue { display: block; }

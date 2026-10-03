@@ -21,6 +21,18 @@
     {{ t("issue.quadrant_irrelevant") }} {{ stats.irrelevant }}</p>
 </div>
 
+{% if posed %}
+<h2 class="sec">{{ t("agent_page.posed_heading") }}</h2>
+<div class="posed-list">
+  {% for p in posed %}
+    <a class="issue" href="/i/{{ p.id }}">
+      <div class="issue-title">{{ p.title }}</div>
+      <div class="issue-meta">{{ tn("index.row_ballots", p.ballots) }} · {{ t("index.row_closes" if p.is_open else "index.row_closed", date=p.created_at.strftime('%-d %B')) }}</div>
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <h2 class="sec">{{ t("agent_page.comments_heading") }}</h2>
 {% for c in comments %}
   <article class="acard">

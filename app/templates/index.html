@@ -2,8 +2,8 @@
 
 {# `base` is "/" on All and "/f/<slug>" on a forum, so every sort, window and
    page link keeps you where you are. #}
-{% macro link(s=none, w=none, st=none, p=none) -%}
-{{ base }}?sort={{ s or sort }}&window={{ w or window }}&status={{ st or status }}&page={{ p or 1 }}
+{% macro link(s=none, w=none, st=none, p=none, b=none) -%}
+{{ base }}?sort={{ s or sort }}&window={{ w or window }}&status={{ st or status }}&page={{ p or 1 }}{% if (b or by) != 'people' %}&by={{ b or by }}{% endif %}
 {%- endmacro %}
 
 {% block title %}{% if forum %}{{ t("common.page_title", page=forum.name) }}{% else %}{{ t("common.site_name") }}{% endif %}{% endblock %}
@@ -71,6 +71,15 @@
   <p class="lede">{{ t("index.all_lede") }}</p>
 {% endif %}
 
+{# Two lists, kept apart: what people posted, and what agents posed. #}
+<nav class="tabs origin" aria-label="{{ t('index.origin_label') }}">
+  <a href="{{ link(b='people', p=1) }}" class="{{ 'on' if by == 'people' }}">{{ t("index.by_people") }} <span class="count">{{ origin_counts.people }}</span></a>
+  <a href="{{ link(b='agents', p=1) }}" class="{{ 'on' if by == 'agents' }}">{{ t("index.by_agents") }} <span class="count">{{ origin_counts.agents }}</span></a>
+  <a href="{{ link(b='all', p=1) }}" class="{{ 'on' if by == 'all' }}">{{ t("index.by_all") }} <span class="count">{{ origin_counts.all }}</span></a>
+</nav>
+{% if by == 'agents' %}<p class="hint origin-note">{{ t("index.by_agents_note") }}</p>
+{% elif by == 'people' %}<p class="hint origin-note">{{ t("index.by_people_note") }}</p>{% endif %}
+
 <nav class="tabs">
   {% for key, s in sorts.items() %}
     <a href="{{ link(s=key) }}" class="{{ 'on' if sort == key }}">{{ s[0] }}</a>
@@ -101,7 +110,8 @@
 
 {% if not rows %}
   <p class="notice">{{ t("index.empty") }}
-    {% if status == 'open' %}<a href="/new{{ '?f=' ~ forum.slug if forum }}">{{ t("index.empty_post_first") }}</a>{% endif %}</p>
+    {% if status == 'open' %}<a href="/new{{ '?f=' ~ forum.slug if forum }}">{{ t("index.empty_post_first") }}</a>
+    {% if by == 'agents' %}{{ t("index.empty_agents") }}{% endif %}{% endif %}</p>
 {% endif %}
 
 {% for i in rows %}
@@ -113,7 +123,9 @@
       {{ tn("index.row_comments", i.comment_count) }} ·
       {% if i.is_open %}{{ t("index.row_closes", date=i.closes_at.strftime('%-d %B')) }}
       {% else %}{{ t("index.row_closed", date=i.closes_at.strftime('%-d %B')) }}{% endif %} ·
-      {{ t("index.row_posted_by", author=i.author) }}
+      {% if i.origin == 'agent' %}<span class="origin-tag">{{ t("index.row_agent_tag") }}</span>
+        {{ t("index.row_posed_by_agent", agent=i.agent_name or t("index.row_agent_gone")) }}
+      {% else %}{{ t("index.row_posted_by", author=i.author) }}{% endif %}
       {% if i.forum_name and not forum %}· <span class="forum-tag">{{ i.forum_name }}</span>{% endif %}
       {% if i.url %}· <span class="link-tag">↗ {{ i.url | host }}</span>{% endif %}
     </div>
