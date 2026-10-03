@@ -35,7 +35,9 @@ async def test_the_essay_has_its_own_page(client):
     assert 'href="https://en.wikipedia.org/wiki/Six_degrees_of_separation"' in r.text
     # The one script on the site is the copy button's, from our own static
     # directory, and the page's policy allows scripts from nowhere else.
-    assert r.text.count("<script") == 1 and 'src="/static/copy.js"' in r.text
+    # (The other block is structured data for search engines, which never runs.)
+    assert r.text.count("<script") == 2 and 'src="/static/copy.js"' in r.text
+    assert r.text.count('<script type="application/ld+json">') == 1
     assert "script-src 'self'" in r.headers["content-security-policy"]
     assert "script-src" not in (await client.get("/how-to")).headers["content-security-policy"]
 

@@ -11,6 +11,8 @@
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 {# Link previews, for when the site is public. Absolute URLs are required
    here, which is one more reason SITE_URL has to match the real address. #}
+<link rel="canonical" href="{{ site_url }}{{ request.url.path }}">
+{% block robots %}{% endblock %}
 <meta name="description" content="{% block og_description %}{{ t('common.link_preview') }}{% endblock %}">
 <meta property="og:type" content="{% block og_type %}website{% endblock %}">
 <meta property="og:site_name" content="{{ t('common.site_name') }}">

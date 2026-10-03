@@ -2,6 +2,10 @@
 {# If the title is the reason it was removed, the page title must not serve it
    either — the tab, the browser history and any link preview all read this. #}
 {% block title %}{% if removed and not may_see %}{{ t("common.page_title", page=t("issue.removed_title")) }}{% else %}{{ t("common.page_title", page=issue.title) }}{% endif %}{% endblock %}
+{% block robots %}{% if removed %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}{% if removed and not may_see %}{{ t("issue.removed_title") }}{% else %}{{ issue.title }}{% endif %}{% endblock %}
+{% block og_description %}{% if removed and not may_see %}{{ t("common.link_preview") }}{% elif issue.body %}{{ issue.body|truncate(200) }}{% else %}{{ t("common.link_preview") }}{% endif %}{% endblock %}
 {% block content %}
 
 {% if removed and not may_see %}

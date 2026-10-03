@@ -23,7 +23,8 @@ from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPBearer
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
+                               RedirectResponse, Response)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
@@ -180,6 +181,14 @@ CSP_DOCS = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inl
 CSP_COPY = CSP.replace("default-src 'none'; ", "default-src 'none'; script-src 'self'; ")
 
 
+# Pages that are for one person, or are machine interfaces: search engines are
+# told to keep them out of their results (here, and in robots.txt).
+NOINDEX_PREFIXES = ("/login", "/register", "/logout", "/account", "/inbox", "/admin",
+                    "/new", "/forgot", "/reset", "/verify", "/observatory/new", "/c/",
+                    "/ac/", "/vote/", "/users", "/agent", "/issues", "/healthz",
+                    "/openapi.json", "/donate", "/static/swagger")
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     texts.maybe_reload()           # an edited texts.toml shows on the next page
@@ -192,6 +201,8 @@ async def security_headers(request: Request, call_next):
     response.headers["Content-Security-Policy"] = (
         CSP_COPY if request.url.path == "/essay" else
         CSP_DOCS if request.url.path == "/docs" else CSP)
+    if request.url.path.startswith(NOINDEX_PREFIXES):
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -436,10 +447,10 @@ STATS_TTL = float(os.environ.get("STATS_TTL", "10"))
 _stats_cache: dict = {}
 
 
-async def cached(key: str, make):
+async def cached(key: str, make, factor: float = 1):
     now = time.monotonic()
     hit = _stats_cache.get(key)
-    if hit and STATS_TTL > 0 and now - hit[0] < STATS_TTL:
+    if hit and STATS_TTL > 0 and now - hit[0] < STATS_TTL * factor:
         return hit[1]
     value = await make()
     _stats_cache[key] = (now, value)
@@ -1865,6 +1876,45 @@ async def favicon():
     this, every one of those is a 404 in the log."""
     return FileResponse(os.path.join(HERE, "static", "favicon.ico"),
                         media_type="image/x-icon")
+
+
+# --- for search engines --------------------------------------------------------
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    rules = "\n".join(f"Disallow: {p}" for p in NOINDEX_PREFIXES if p != "/static/swagger")
+    return PlainTextResponse(
+        f"User-agent: *\nAllow: /\n{rules}\n\n"
+        f"Sitemap: {SITE_URL}/sitemap.xml\n")
+
+
+async def _sitemap() -> str:
+    from xml.sax.saxutils import escape
+    urls = [("/", None), ("/essay", None), ("/how-to", None), ("/forums", None),
+            ("/observatory", None), ("/docs", None)]
+    for r in await q("""SELECT f.slug, max(i.created_at) AS at
+                          FROM forums f JOIN issues i ON i.forum_id = f.id
+                         WHERE f.kind <> 'human' AND i.removed_at IS NULL
+                      GROUP BY f.slug ORDER BY f.slug"""):
+        urls.append((f"/f/{r['slug']}", r["at"]))
+    for r in await q("""SELECT id, created_at FROM issues WHERE removed_at IS NULL
+                      ORDER BY created_at DESC LIMIT 45000"""):
+        urls.append((f"/i/{r['id']}", r["created_at"]))
+    body = "".join(
+        f"<url><loc>{escape(SITE_URL + path)}</loc>"
+        + (f"<lastmod>{at.date().isoformat()}</lastmod>" if at else "") + "</url>"
+        for path, at in urls)
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            + body + "</urlset>")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml():
+    """Every public page worth finding. Kept for ten minutes at a time, and
+    capped well under the 50,000-address limit of one sitemap file."""
+    return Response(await cached("sitemap", _sitemap, factor=60),
+                    media_type="application/xml")
 
 
 @app.get("/healthz")

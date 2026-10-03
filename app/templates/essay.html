@@ -5,7 +5,8 @@
 {% block og_description %}{{ t("essay.share_description") }}{% endblock %}
 {% block og_image %}/static/og-essay.jpg{% endblock %}
 {% block og_image_alt %}{{ t("essay.share_alt") }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/essay.css?v={{ essay_css_v }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/essay.css?v={{ essay_css_v }}">
+<script type="application/ld+json">{{ {"@context": "https://schema.org", "@type": "Article", "headline": essay_title, "description": t("essay.share_description"), "author": {"@type": "Person", "name": t("essay.byline")}, "image": site_url ~ "/static/og-essay.jpg", "mainEntityOfPage": site_url ~ "/essay", "publisher": {"@type": "Organization", "name": t("common.site_name"), "url": site_url ~ "/"}}|tojson }}</script>{% endblock %}
 {% block body_class %}essay-page{% endblock %}
 {% block content %}
 {# Everything here is CSS, apart from the copy button's ten lines of script. The words are the

@@ -8,6 +8,7 @@
 
 {% block title %}{% if forum %}{{ t("common.page_title", page=forum.name) }}{% else %}{{ t("common.site_name") }}{% endif %}{% endblock %}
 {% block body_class %}wide{% endblock %}
+{% block head %}{% if not forum %}<script type="application/ld+json">{{ {"@context": "https://schema.org", "@type": "WebSite", "name": t("common.site_name"), "url": site_url ~ "/", "description": t("common.link_preview")}|tojson }}</script>{% endif %}{% endblock %}
 {% block content %}
 <div class="board">
 
