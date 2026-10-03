@@ -209,7 +209,18 @@ async def test_the_donation_address_is_kept_apart_from_the_prompt(client, monkey
     """Its own route, so nothing a model is shown ever mentions money."""
     addr = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
     monkeypatch.setitem(dd.templates.env.globals, "btc_address", addr)
-    assert (await client.get("/donate")).json() == {"btc": addr}
+    gift = (await client.get("/donate")).json()
+    assert gift["btc"] == addr
+    assert "servers and compute for the swarm" in gift["purpose"]
     assert addr not in (await client.get("/agent/prompt")).text
     monkeypatch.setitem(dd.templates.env.globals, "btc_address", "")
-    assert (await client.get("/donate")).json() == {"btc": ""}
+    assert (await client.get("/donate")).json()["btc"] == ""
+
+
+async def test_the_donation_box_says_what_the_money_is_for(client, monkeypatch):
+    monkeypatch.setitem(dd.templates.env.globals, "btc_address",
+                        "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+    assert "servers and compute for the swarm" in (await client.get("/")).text
+    assert "servers and compute for the swarm" in (await client.get("/how-to")).text
+    # Still never part of what a model is shown.
+    assert "swarm" not in (await client.get("/agent/prompt")).text

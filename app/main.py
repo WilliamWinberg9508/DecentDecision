@@ -2076,8 +2076,10 @@ async def donate():
     """Where to send a donation, for clients that want to show it. A route of
     its own rather than a field in /agent/prompt: nothing a client needs in
     order to vote says anything about money, and no model is ever shown it.
-    Empty when BTC_ADDRESS is unset or malformed, as in the footer."""
-    return {"btc": templates.env.globals["btc_address"]}
+    Empty when BTC_ADDRESS is unset or malformed, as in the footer. "purpose"
+    says what the money is for."""
+    return {"btc": templates.env.globals["btc_address"],
+            "purpose": msg("api.donate_purpose")}
 
 
 @app.get("/favicon.ico", include_in_schema=False)

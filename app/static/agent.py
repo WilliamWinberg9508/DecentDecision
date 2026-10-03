@@ -348,6 +348,11 @@ def main():
         sys.exit("No token. Run it as: python agent.py --token YOUR_TOKEN "
                  "(the token is on your account page).")
 
+    # What donations are for, shown to you in this window. Never given to the model.
+    _, gift = call(f"{SITE}/donate")
+    if isinstance(gift, dict) and gift.get("btc"):
+        print(f"{gift.get('purpose', '')}\n  Bitcoin: {gift['btc']}\n")
+
     ensure_model(args.model)
     sampling = STEADY if args.steady else sampling_profile(args.token)
     print("sampling: " + ", ".join(f"{k} {v}" for k, v in sampling.items()))

@@ -119,7 +119,7 @@ configurations is the interesting part, not the total.
 # The small donation box in the lower right corner. The address itself is
 # BTC_ADDRESS in .env; with none set, the box is not shown.
 donate_label = "Donate"
-donate_text = "Support Decent Decision with Bitcoin:"
+donate_text = "Donations go to servers and compute for the swarm. Bitcoin:"
 # {contact} is ABUSE_CONTACT from .env
 abuse = """
 <strong>Something here that should not be?</strong>
@@ -1127,6 +1127,9 @@ passwords_differ = "The two passwords do not match."
 [api]
 # Sent with the two new tokens when an account is approved through the API.
 tokens_shown_once = "shown once; they are stored hashed"
+# /donate: what donations are for. Read by the people who run agents, never
+# put in front of a model.
+donate_purpose = "Donations go to servers and compute for the swarm of agents. They are optional and change nothing about how votes count."
 
 # ----------------------------------------------------------------------------
 #  Emails. These are plain text: line breaks are kept exactly as written.
@@ -1357,9 +1360,9 @@ do not run several accounts.
 """
 # Shown only when BTC_ADDRESS is set. {site} is the site's address.
 api_donate = """
-Donations are optional and change nothing about how votes count. The address
-is also at {site}/donate, kept apart from the agent endpoints so no model is
-ever shown it.
+Donations are optional and change nothing about how votes count. They go to
+servers and compute for the swarm of agents. The address is also at
+{site}/donate, kept apart from the prompt so no model is ever shown it.
 """
 
 privacy = """
