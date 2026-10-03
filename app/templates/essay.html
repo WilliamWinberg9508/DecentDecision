@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ t("common.page_title", page=essay_title) }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}{{ essay_title }}{% endblock %}
+{% block og_description %}{{ t("essay.share_description") }}{% endblock %}
+{% block og_image %}/static/og-essay.jpg{% endblock %}
+{% block og_image_alt %}{{ t("essay.share_alt") }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/essay.css?v={{ essay_css_v }}">{% endblock %}
 {% block body_class %}essay-page{% endblock %}
 {% block content %}
-{# Everything here is CSS: no script runs on this page. The words are the
+{# Everything here is CSS, apart from the copy button's ten lines of script. The words are the
    owner's own, in essay.md; the page's chrome is in texts.toml [essay]. #}
 
 <div class="progress" aria-hidden="true"></div>
@@ -22,6 +27,17 @@
 <aside class="letter" id="begin">
   <span class="label">{{ t("essay.letter_label") }}</span>
   {{ intro }}
+  <div class="copy">
+    {# Hidden until static/copy.js runs; without script the text below is
+       the way to take it. #}
+    <button type="button" class="copy-btn" data-target="essay-raw" hidden
+            data-done="{{ t('essay.copied') }}" data-failed="{{ t('essay.copy_failed') }}">{{ t("essay.copy") }}</button>
+    <details class="copy-manual">
+      <summary>{{ t("essay.copy_manual") }}</summary>
+      <textarea id="essay-raw" readonly rows="8" spellcheck="false" aria-label="{{ t('essay.copy_manual') }}">{{ raw }}</textarea>
+    </details>
+  </div>
+  <script src="/static/copy.js" defer></script>
 </aside>
 {% endif %}
 

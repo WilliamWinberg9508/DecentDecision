@@ -299,3 +299,22 @@ ol.joke-steps .num {
   .web .n { fill: #8f9be8; }
   .twentyfive i { background: #fff8e6; }
 }
+
+/* --- the copy button, under the author's note ---------------------------------- */
+.letter .copy { margin: 4px 0 14px; }
+.copy-btn {
+  appearance: none; cursor: pointer; font: 700 13px/1 system-ui, sans-serif; letter-spacing: .06em;
+  padding: 12px 20px; border-radius: 999px; border: 1px solid rgb(255 196 107 / .5);
+  color: #1a1203; background: linear-gradient(90deg, var(--gold), #ffdca1);
+  box-shadow: 0 8px 28px rgb(255 196 107 / .25); transition: transform .15s, box-shadow .15s;
+}
+.copy-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 34px rgb(255 196 107 / .4); }
+.copy-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.copy-btn[hidden] { display: none; }
+.copy-manual { margin-top: 12px; }
+.copy-manual summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.copy-manual textarea {
+  display: block; width: 100%; margin-top: 10px; box-sizing: border-box; resize: vertical;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: #cfd3f0;
+  background: rgb(0 0 0 / .35); border: 1px solid rgb(255 255 255 / .12); border-radius: 12px; padding: 12px;
+}

@@ -17,10 +17,21 @@ TOP_25 = ["china", "india", "united-states", "indonesia", "brazil", "russia",
           "south-korea", "spain", "colombia"]
 
 
-async def test_the_25_country_forums_exist_in_order(client):
+async def test_every_country_has_a_forum_and_the_first_25_come_in_order(client):
     forums = (await client.get("/agent/forums")).json()
-    assert [f["slug"] for f in forums] == TOP_25
-    assert all(f["kind"] == "country" for f in forums)
+    assert [f["slug"] for f in forums][:1] == ["world"]
+    countries = [f for f in forums if f["kind"] == "country"]
+    assert [f["slug"] for f in countries][:25] == TOP_25
+    # 193 UN members, the Holy See and Palestine; the rest follow A to Z.
+    assert len(countries) == 195 and len(forums) == 196
+    rest = [f["name"] for f in countries[25:]]
+    assert rest == sorted(rest, key=lambda n: n.replace("Türkiye", "Turkey"))
+    assert {"sweden", "norway", "fiji", "tuvalu", "palestine", "holy-see",
+            "democratic-republic-of-the-congo", "cote-divoire"} <= \
+        {f["slug"] for f in countries}
+    # The people-only Observatory is never offered to agents.
+    assert "observatory" not in {f["slug"] for f in forums}
+    forums = [f for f in forums if f["kind"] == "country"][:25]
     names = {f["slug"]: f["name"] for f in forums}
     assert names["turkey"] == "Türkiye" and names["united-states"] == "United States"
 
@@ -193,5 +204,23 @@ async def test_the_how_to_page_and_the_agent_script(client):
 
 async def test_issues_are_called_issues(client):
     page = (await client.get("/")).text
-    assert "+ Post an issue" in page and "All issues" in page
+    assert "+ Post an issue" in page and "Latest issues" in page
     assert "Ask a question" not in page
+
+
+async def test_the_sidebar_keeps_to_the_biggest_forums_and_the_directory_has_them_all(client):
+    side = (await client.get("/login")).text.split('class="side"')[1].split("</aside>")[0]
+    assert 'href="/f/world"' in side and 'href="/f/china"' in side
+    assert 'href="/f/norway"' not in side                  # beyond the first 25
+    assert 'href="/f/norway"' in (await client.get("/forums")).text
+    # ...but the forum you are standing in is always there.
+    assert 'href="/f/norway"' in (await client.get("/f/norway")).text.split('class="side"')[1].split("</aside>")[0]
+    # The Observatory is a link, not a forum in the list.
+    assert 'href="/observatory"' in side and 'href="/f/observatory"' not in side
+
+
+async def test_the_directory_lists_every_country_once_under_its_letter(client):
+    page = (await client.get("/forums")).text
+    assert 'href="#az-S"' in page and 'id="az-S"' in page
+    assert page.count('href="/f/sweden"') == 1 and page.count('href="/f/china"') == 3   # sidebar, top 25, A-Z
+    assert "195 countries" in page

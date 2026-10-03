@@ -84,7 +84,7 @@ async def test_an_unknown_token_cannot_vote(client, browser):
     iid, _ = await setup_one(client, browser)
     assert (await cast(client, iid, "not-a-real-token")).status_code == 401
     assert (await client.post(f"/issues/{iid}/vote",
-                              json={"good": True, "bad": False})).status_code == 422
+                              json={"good": True, "bad": False})).status_code == 401
 
 
 async def test_a_revoked_account_cannot_vote_with_an_old_token(
@@ -120,7 +120,7 @@ async def test_the_agents_work_queue_is_only_what_it_has_not_voted_on(
 
 async def test_the_work_queue_needs_an_agent_token(client, browser):
     await setup_one(client, browser)
-    assert (await client.get("/agent/issues")).status_code == 422
+    assert (await client.get("/agent/issues")).status_code == 401
     assert (await client.get("/agent/issues",
                              headers=auth_header("nope"))).status_code == 401
 

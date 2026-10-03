@@ -2,17 +2,50 @@
 {% block title %}{{ t("common.page_title", page=t("forums.title")) }}{% endblock %}
 {% block content %}
 
-<h1>{{ t("forums.title") }}</h1>
-<p class="lede">{{ t("forums.lede") }}</p>
+<header class="page-hero">
+  <h1>{{ t("forums.title") }}</h1>
+  <p class="lede">{{ t("forums.lede", count=country_count) }}</p>
+</header>
 
-<div class="forum-grid">
-  {% for f in forums %}
-    <a class="forum-card" href="/f/{{ f.slug }}">
-      <div class="issue-title">{{ f.name }}</div>
-      <div class="issue-meta">{{ t("forums.card_counts", open=f.open_issues) }}
-        {{ tn("forums.card_total", f.issues) }}</div>
-    </a>
-  {% endfor %}
+{# One card, used three times below. #}
+{% macro card(f) %}
+  {% set b = badge(f.slug, f.name, f.iso) %}
+  <a class="forum-card" href="/f/{{ f.slug }}" style="--h: {{ b.hue }}">
+    <span class="avatar big" style="--h: {{ b.hue }}">{{ b.code }}</span>
+    <span class="fc-text">
+      <span class="fc-name">{{ f.name }}</span>
+      <span class="fc-meta">{% if f.issues %}{{ t("forums.card_counts", open=f.open_issues) }} {{ tn("forums.card_total", f.issues) }}{% else %}{{ t("forums.card_empty") }}{% endif %}</span>
+    </span>
+  </a>
+{% endmacro %}
+
+<h2 class="sec first">{{ t("forums.special_heading") }}</h2>
+<div class="forum-grid wide">
+  {% for f in special %}{{ card(f) }}{% endfor %}
+  <a class="forum-card observatory-card" href="/observatory" style="--h: 250">
+    <span class="avatar big" style="--h: 250">OB</span>
+    <span class="fc-text">
+      <span class="fc-name">{{ t("forums.observatory_name") }}</span>
+      <span class="fc-meta">{{ t("forums.observatory_meta") }}</span>
+    </span>
+  </a>
 </div>
+
+<h2 class="sec">{{ t("forums.top_heading") }}</h2>
+<p class="lede">{{ t("forums.top_lede") }}</p>
+<div class="forum-grid">
+  {% for f in top %}{{ card(f) }}{% endfor %}
+</div>
+
+<h2 class="sec" id="az">{{ t("forums.az_heading", count=country_count) }}</h2>
+<nav class="jump" aria-label="{{ t('forums.jump_label') }}">
+  {% for letter, group in letters %}<a href="#az-{{ letter }}">{{ letter }}</a>{% endfor %}
+</nav>
+{% for letter, group in letters %}
+  <h3 class="letter-head" id="az-{{ letter }}">{{ letter }}</h3>
+  <div class="forum-grid">
+    {% for f in group %}{{ card(f) }}{% endfor %}
+  </div>
+{% endfor %}
 
 {% endblock %}

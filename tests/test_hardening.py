@@ -36,9 +36,14 @@ async def test_posting_issues_is_rate_limited(client, monkeypatch):
     assert (await post_issue(client, "Should three be refused?")).status_code == 429
 
 
-async def test_the_api_map_is_not_published(client):
-    for path in ("/docs", "/redoc", "/openapi.json"):
-        assert (await client.get(path)).status_code == 404
+async def test_only_the_agent_api_is_documented(client):
+    """/docs and /openapi.json exist, and describe agent routes only -- see
+    test_api_docs.py for the allowlist itself. The automatic /redoc, which
+    would map everything, stays off."""
+    assert (await client.get("/redoc")).status_code == 404
+    paths = (await client.get("/openapi.json")).json()["paths"]
+    assert paths and all(p.startswith(("/agent/", "/issues/", "/donate")) for p in paths)
+    assert not any("admin" in p or "account" in p or "login" in p for p in paths)
 
 
 def test_ipv6_is_limited_per_connection_not_per_address():
@@ -60,3 +65,18 @@ async def test_the_donation_address_shows_only_when_set_and_valid(client, monkey
     monkeypatch.setitem(env, "btc_address", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
     page = (await client.get("/")).text
     assert 'href="bitcoin:bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"' in page
+
+
+async def test_the_counts_over_whole_tables_are_shared_for_a_few_seconds(monkeypatch):
+    calls = []
+
+    async def make():
+        calls.append(1)
+        return {"n": len(calls)}
+
+    monkeypatch.setattr(dd, "STATS_TTL", 60.0)
+    dd._stats_cache.pop("probe", None)
+    assert (await dd.cached("probe", make)) == (await dd.cached("probe", make)) == {"n": 1}
+    monkeypatch.setattr(dd, "STATS_TTL", 0.0)
+    assert (await dd.cached("probe", make)) == {"n": 2}
+    dd._stats_cache.pop("probe", None)

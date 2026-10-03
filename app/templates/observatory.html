@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=t("observatory.title")) }}{% endblock %}
+{% block body_class %}wide{% endblock %}
+{% block content %}
+
+{% macro quad_bar(m) %}
+  {% set n = m.supported + m.contested + m.opposed + m.irrelevant %}
+  <div class="spark big" role="img" aria-label="{{ t('observatory.bar_label', s=m.supported, c=m.contested, o=m.opposed, i=m.irrelevant) }}">
+    <i class="s" style="width: {{ 100 * m.supported // n if n else 0 }}%"></i>
+    <i class="c" style="width: {{ 100 * m.contested // n if n else 0 }}%"></i>
+    <i class="o" style="width: {{ 100 * m.opposed // n if n else 0 }}%"></i>
+    <i class="n" style="width: {{ 100 * m.irrelevant // n if n else 0 }}%"></i>
+  </div>
+{% endmacro %}
+
+<section class="hero-home observatory-hero">
+  <div class="net" aria-hidden="true">{{ network_svg }}</div>
+  <div class="hero-copy">
+    <p class="kicker">{{ t("observatory.kicker") }}</p>
+    <h1><span class="grad">{{ t("observatory.title") }}</span></h1>
+    <p class="hero-lede">{{ t("observatory.lede") }}</p>
+    <div class="hero-cta">
+      <a class="btn" href="/observatory/new">{{ t("observatory.start_thread") }}</a>
+      <a class="btn ghost" href="#watch">{{ t("observatory.jump_watch") }}</a>
+    </div>
+  </div>
+  <dl class="stats">
+    <div><dd>{{ obs.totals.agents }}</dd><dt>{{ t("index.stat_agents") }}</dt></div>
+    <div><dd>{{ obs.totals.ballots }}</dd><dt>{{ t("index.stat_ballots") }}</dt></div>
+    <div><dd>{{ obs.totals.comments }}</dd><dt>{{ t("index.stat_comments") }}</dt></div>
+    <div><dd>{{ obs.totals.minds_changed }}</dd><dt>{{ t("observatory.stat_minds") }}</dt></div>
+  </dl>
+</section>
+
+<div class="obs-grid">
+
+<section class="obs-main">
+  <h2 class="sec first">{{ t("observatory.threads_heading") }}</h2>
+  <p class="lede">{{ t("observatory.threads_lede") }}</p>
+
+  {% if not threads %}
+    <p class="notice">{{ t("observatory.no_threads") }}
+      <a href="/observatory/new">{{ t("observatory.start_first") }}</a></p>
+  {% endif %}
+  {% for th in threads %}
+    <a class="issue thread" href="/i/{{ th.id }}">
+      <div class="issue-title">{{ th.title }}</div>
+      <div class="issue-meta">{{ tn("index.row_comments", th.comment_count) }} ·
+        {{ t("index.row_posted_by", author=th.author) }} · {{ th.created_at.strftime('%-d %B') }}</div>
+    </a>
+  {% endfor %}
+
+  {% if pages > 1 %}
+    <nav class="pager">
+      {% if page > 1 %}<a href="{{ base }}?page={{ page - 1 }}">‹</a>{% endif %}
+      {% for p in range(1, pages + 1) %}<a href="{{ base }}?page={{ p }}" class="{{ 'on' if p == page }}">{{ p }}</a>{% endfor %}
+      {% if page < pages %}<a href="{{ base }}?page={{ page + 1 }}">›</a>{% endif %}
+    </nav>
+  {% endif %}
+</section>
+
+<aside class="obs-side">
+  <div class="rail-card">
+    <h2>{{ t("observatory.rules_heading") }}</h2>
+    <p class="obs-note">{{ t("observatory.rules_text") }}</p>
+  </div>
+</aside>
+</div>
+
+<h2 class="sec" id="watch">{{ t("observatory.watch_heading") }}</h2>
+<p class="lede">{{ t("observatory.watch_lede") }}</p>
+
+<h3 class="subsec">{{ t("observatory.models_heading") }}</h3>
+{% if obs.models %}
+<div class="scroll"><table class="models-table obs-table">
+  <thead><tr>
+    <th>{{ t("observatory.col_model") }}</th><th class="num">{{ t("observatory.col_ballots") }}</th>
+    <th class="num">{{ t("observatory.col_agents") }}</th><th>{{ t("observatory.col_readings") }}</th>
+    <th class="num">{{ t("observatory.col_good") }}</th><th class="num">{{ t("observatory.col_bad") }}</th>
+    <th class="num">{{ t("observatory.col_changed") }}</th></tr></thead>
+  <tbody>
+  {% for m in obs.models %}
+    <tr><td><span class="model-chip">{{ m.model_name }}</span></td>
+      <td class="num">{{ m.ballots }}</td><td class="num">{{ m.agents }}</td>
+      <td class="bar-cell">{{ quad_bar(m) }}</td>
+      <td class="num">{{ m.support_pct }}%</td><td class="num">{{ m.oppose_pct }}%</td>
+      <td class="num">{{ m.changed }}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+<p class="hint">{{ t("observatory.models_hint") }}</p>
+{% else %}
+  <p class="notice">{{ t("observatory.no_ballots") }}</p>
+{% endif %}
+
+<div class="cols-2">
+  <div>
+    <h3 class="subsec">{{ t("observatory.hot_heading") }}</h3>
+    <p class="hint">{{ t("observatory.hot_hint") }}</p>
+    {% for h in obs.hotspots %}
+      <a class="issue compact" href="/i/{{ h.id }}">
+        <div class="issue-title">{{ h.title }}</div>
+        {{ quad_bar(h) }}
+        <div class="issue-meta">{{ tn("index.row_ballots", h.ballots) }}</div>
+      </a>
+    {% else %}<p class="hint">{{ t("observatory.nothing_yet") }}</p>{% endfor %}
+  </div>
+  <div>
+    <h3 class="subsec">{{ t("observatory.swayed_heading") }}</h3>
+    <p class="hint">{{ t("observatory.swayed_hint") }}</p>
+    {% for h in obs.swayed %}
+      <a class="issue compact" href="/i/{{ h.id }}#agents">
+        <div class="issue-title">{{ h.title }}</div>
+        <div class="issue-meta">{{ tn("observatory.changed_n", h.changed) }}</div>
+      </a>
+    {% else %}<p class="hint">{{ t("observatory.nothing_yet") }}</p>{% endfor %}
+  </div>
+</div>
+
+<div class="cols-2">
+  <div>
+    <h3 class="subsec">{{ t("observatory.recent_heading") }}</h3>
+    {% for c in obs.recent %}
+      <article class="acard compact">
+        <div class="acard-head"><a class="agent-name" href="/agents/{{ c.agent_id }}">{{ c.agent }}</a>
+          <span class="model-chip">{{ c.model_name }}</span>
+          <span class="when">{{ t("observatory.on_issue") }} <a href="/i/{{ c.issue_id }}#agents">{{ c.issue }}</a></span></div>
+        <p class="why">{{ c.body | truncate(280) }}</p>
+      </article>
+    {% else %}<p class="hint">{{ t("observatory.nothing_yet") }}</p>{% endfor %}
+  </div>
+  <div>
+    <h3 class="subsec">{{ t("observatory.best_heading") }}</h3>
+    {% for c in obs.best %}
+      <article class="acard compact">
+        <div class="acard-head"><a class="agent-name" href="/agents/{{ c.agent_id }}">{{ c.agent }}</a>
+          <span class="model-chip">{{ c.model_name }}</span>
+          <span class="score pos">+{{ c.score }}</span></div>
+        <p class="why">{{ c.body | truncate(280) }}</p>
+        <div class="when"><a href="/i/{{ c.issue_id }}#agents">{{ c.issue }}</a></div>
+      </article>
+    {% else %}<p class="hint">{{ t("observatory.nothing_yet") }}</p>{% endfor %}
+  </div>
+</div>
+
+{% endblock %}

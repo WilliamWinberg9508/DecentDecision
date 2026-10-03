@@ -33,7 +33,20 @@ async def test_the_essay_has_its_own_page(client):
     assert 'href="/new"' in r.text.split('class="dawn"')[1]
     # Sources are links, and the essay carries no script of its own.
     assert 'href="https://en.wikipedia.org/wiki/Six_degrees_of_separation"' in r.text
-    assert "<script" not in r.text
+    # The one script on the site is the copy button's, from our own static
+    # directory, and the page's policy allows scripts from nowhere else.
+    assert r.text.count("<script") == 1 and 'src="/static/copy.js"' in r.text
+    assert "script-src 'self'" in r.headers["content-security-policy"]
+    assert "script-src" not in (await client.get("/how-to")).headers["content-security-policy"]
+
+
+async def test_the_copy_button_carries_the_whole_essay(client):
+    r = await client.get("/essay")
+    box = r.text.split('id="essay-raw"')[1].split("</textarea>")[0]
+    # Text, appendix and sources -- but not the author's note above them.
+    assert "Appendix" in box and "Sources" in box
+    assert "paste it into your favorite LLM" not in box
+    assert 'class="copy-btn"' in r.text and " hidden" in r.text.split('class="copy-btn"')[1][:80]
 
 
 async def test_every_page_links_to_the_essay_beside_the_logo(client):
@@ -81,3 +94,30 @@ async def test_an_essay_without_steps_or_a_note_still_renders(client, tmp_path, 
     assert r.status_code == 200 and "Just words." in r.text
     assert 'class="letter"' not in r.text and 'class="dawn"' not in r.text
     assert '<details class="fold"><summary>Appendix</summary>' in r.text
+
+
+async def test_the_essay_has_its_own_link_preview(client, monkeypatch):
+    """What Reddit, Slack and the rest show when the essay is linked."""
+    monkeypatch.setitem(dd._essay, "mtime", 0.0)   # earlier tests swapped the text
+    r = await client.get("/essay")
+    assert 'property="og:image" content="http://dd.test/static/og-essay.jpg"' in r.text
+    assert 'name="twitter:image" content="http://dd.test/static/og-essay.jpg"' in r.text
+    assert 'property="og:url" content="http://dd.test/essay"' in r.text
+    assert 'property="og:type" content="article"' in r.text
+    assert 'property="og:title" content="Critical Mass' in r.text.replace("&#39;", "'")
+    assert "Every single person alive knows the solution" in r.text.split("og:description")[1][:300]
+    assert 'name="twitter:card" content="summary_large_image"' in r.text
+    assert 'property="og:image:width" content="1200"' in r.text
+    # The card itself is served, and is a real picture.
+    card = await client.get("/static/og-essay.jpg")
+    assert card.status_code == 200 and card.headers["content-type"].startswith("image/jpeg")
+    assert card.content[:2] == b"\xff\xd8"
+
+
+async def test_other_pages_keep_the_site_card(client):
+    r = await client.get("/how-to")
+    assert 'property="og:image" content="http://dd.test/static/og-card.jpg"' in r.text
+    assert 'property="og:type" content="website"' in r.text
+    assert 'property="og:url" content="http://dd.test/how-to"' in r.text
+    assert "Humans post the issues. AI agents vote and argue." in r.text
+    assert "og-essay" not in r.text

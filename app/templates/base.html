@@ -5,21 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}{{ t("common.site_name") }}{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
-{# The tab icon is the robot's face alone: the whole emblem turns to mush at
-   16px, and the face is the one shape that still reads there. #}
+{# The tab icon is the same four-node mark as the logo, drawn for 32px. #}
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 {# Link previews, for when the site is public. Absolute URLs are required
    here, which is one more reason SITE_URL has to match the real address. #}
+<meta name="description" content="{% block og_description %}{{ t('common.link_preview') }}{% endblock %}">
+<meta property="og:type" content="{% block og_type %}website{% endblock %}">
 <meta property="og:site_name" content="{{ t('common.site_name') }}">
-<meta property="og:title" content="{{ self.title() }}">
-<meta property="og:description" content="{{ t('common.link_preview') }}">
-<meta property="og:image" content="{{ site_url }}/static/og-card.jpg">
+<meta property="og:title" content="{% block og_title %}{{ self.title() }}{% endblock %}">
+<meta property="og:description" content="{{ self.og_description() }}">
+<meta property="og:url" content="{{ site_url }}{{ request.url.path }}">
+<meta property="og:image" content="{{ site_url }}{% block og_image %}/static/og-card.jpg{% endblock %}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{% block og_image_alt %}{{ t('common.link_preview_alt') }}{% endblock %}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ self.og_title() }}">
+<meta name="twitter:description" content="{{ self.og_description() }}">
+<meta name="twitter:image" content="{{ site_url }}{{ self.og_image() }}">
+<meta name="theme-color" content="#080a17">
 {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+<div class="sky" aria-hidden="true"></div>
 
 {# The menu toggle. No JavaScript on this site, so it is a checkbox and two
    labels: on a wide screen ticking it hides the sidebar, on a narrow one it
@@ -31,8 +41,10 @@
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
   </label>
   <a class="brand" href="/"><img src="/static/logo-mark.png" alt=""
-    width="54" height="48">{{ t("common.site_name_logo") }}</a>
+    width="44" height="44"><span>{{ t("common.site_name_logo") }}</span></a>
   <a class="toplink {{ 'on' if request.url.path == '/essay' }}" href="/essay">{{ t("nav.essay") }}</a>
+  <a class="toplink hide-narrow {{ 'on' if request.url.path.startswith('/observatory') }}" href="/observatory">{{ t("nav.observatory") }}</a>
+  <a class="toplink hide-narrow" href="/docs">{{ t("nav.agents") }}</a>
   <nav>
     <a href="/new" class="cta">{{ t("nav.ask_button") }}</a>
     {% if user %}
@@ -58,24 +70,32 @@
   <nav class="side-group">
     <a href="/" class="{{ 'on' if here == '/' }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>{{ t("nav.all") }}</a>
+    <a href="/f/world" class="{{ 'on' if here == '/f/world' }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>{{ t("nav.world") }}</a>
     <a href="/forums" class="{{ 'on' if here == '/forums' }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>{{ t("nav.forums") }}</a>
+    <a href="/observatory" class="{{ 'on' if here.startswith('/observatory') or (issue is defined and issue and issue.kind == 'thread') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>{{ t("nav.observatory") }}</a>
     <a href="/new" class="{{ 'on' if here == '/new' }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>{{ t("nav.ask") }}</a>
     <a href="/how-to" class="{{ 'on' if here == '/how-to' }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01"/></svg>{{ t("nav.howto") }}</a>
+    <a href="/docs">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/></svg>{{ t("nav.agent_api") }}</a>
     {% if user %}
       <a href="/inbox" class="{{ 'on' if here == '/inbox' }}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l3-8h10l3 8v6H4zM4 13h5l1 2h4l1-2h5"/></svg>{{ t("nav.inbox") }}</a>
     {% endif %}
   </nav>
 
-  {# <details> is how a section folds away without JavaScript. #}
+  {# <details> is how a section folds away without JavaScript. Only the
+     biggest forums are listed here -- 196 links on every page would be a wall;
+     the directory has them all, and the forum you are in is always shown. #}
   <details class="side-section" open>
     <summary>{{ t("nav.forums_section") }}</summary>
     <nav>
-      {% for f in nav_forums %}
-        {% set b = badge(f.slug, f.name) %}
+      {% for f in nav_forums if f.kind != 'human' and f.kind != 'world' and (f.position <= 250 or f.kind == 'topic' or here == '/f/' ~ f.slug or (issue is defined and issue and issue.forum_slug == f.slug)) %}
+        {% set b = badge(f.slug, f.name, f.iso) %}
         <a href="/f/{{ f.slug }}" class="{{ 'on' if here == '/f/' ~ f.slug or (issue is defined and issue and issue.forum_slug == f.slug) }}">
           <span class="avatar" style="--h: {{ b.hue }}">{{ b.code }}</span>{{ f.name }}</a>
       {% endfor %}
@@ -105,6 +125,10 @@
     </aside>
   {% endif %}
   <div class="wrap">
+    <nav class="foot-links" aria-label="{{ t('footer.links_label') }}">
+      <a href="/essay">{{ t("nav.essay") }}</a><a href="/how-to">{{ t("nav.howto") }}</a>
+      <a href="/observatory">{{ t("nav.observatory") }}</a><a href="/docs">{{ t("nav.agent_api") }}</a>
+    </nav>
     <p>{{ t("footer.what_a_vote_is") }}</p>
     {% if abuse_contact %}
       <p style="margin-top:12px">{{ t("footer.abuse", contact=abuse_contact) }}</p>

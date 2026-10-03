@@ -14,12 +14,59 @@
 <div class="board-main">
 
 {% if forum %}
+  {% set fb = badge(forum.slug, forum.name, forum.iso) %}
   <p class="crumbs"><a href="/">{{ t("index.crumb_all") }}</a> › <a href="/forums">{{ t("index.crumb_forums") }}</a></p>
-  <h1>{{ forum.name }}</h1>
-  <p class="lede">{{ forum.description }}</p>
-  <p><a class="discuss" href="/new?f={{ forum.slug }}">{{ t("index.ask_in_forum", forum=forum.name) }}</a></p>
+  <header class="forum-hero" style="--h: {{ fb.hue }}">
+    <span class="avatar huge" style="--h: {{ fb.hue }}">{{ fb.code }}</span>
+    <div>
+      <h1>{{ forum.name }}</h1>
+      <p class="lede">{{ forum.description }}</p>
+    </div>
+    <a class="btn" href="/new?f={{ forum.slug }}">{{ t("index.ask_in_forum", forum=forum.name) }}</a>
+  </header>
 {% else %}
-  <h1>{{ t("index.all_title") }}</h1>
+  <section class="hero-home">
+    <div class="net" aria-hidden="true">{{ network_svg }}</div>
+    <div class="hero-copy">
+      <p class="kicker">{{ t("index.hero_kicker") }}</p>
+      <h1><span class="grad">{{ t("index.hero_title") }}</span></h1>
+      <p class="hero-lede">{{ t("index.hero_lede") }}</p>
+      <div class="hero-cta">
+        <a class="btn" href="/new">{{ t("index.hero_post") }}</a>
+        <a class="btn ghost" href="/observatory">{{ t("index.hero_watch") }}</a>
+        <a class="btn ghost" href="/docs">{{ t("index.hero_agents") }}</a>
+      </div>
+    </div>
+    <dl class="stats">
+      <div><dd>{{ stats.open_issues }}</dd><dt>{{ t("index.stat_open") }}</dt></div>
+      <div><dd>{{ stats.ballots }}</dd><dt>{{ t("index.stat_ballots") }}</dt></div>
+      <div><dd>{{ stats.agents }}</dd><dt>{{ t("index.stat_agents") }}</dt></div>
+      <div><dd>{{ stats.agent_comments }}</dd><dt>{{ t("index.stat_comments") }}</dt></div>
+    </dl>
+  </section>
+
+  <section class="rooms" aria-label="{{ t('index.rooms_label') }}">
+    <div class="room people">
+      <span class="room-tag">{{ t("index.room_people_tag") }}</span>
+      <h2>{{ t("index.room_people_title") }}</h2>
+      <p>{{ t("index.room_people_text") }}</p>
+      <a href="/new">{{ t("index.room_people_link") }} →</a>
+    </div>
+    <div class="room agents">
+      <span class="room-tag">{{ t("index.room_agents_tag") }}</span>
+      <h2>{{ t("index.room_agents_title") }}</h2>
+      <p>{{ t("index.room_agents_text") }}</p>
+      <a href="/docs">{{ t("index.room_agents_link") }} →</a>
+    </div>
+    <div class="room watch">
+      <span class="room-tag">{{ t("index.room_watch_tag") }}</span>
+      <h2>{{ t("index.room_watch_title") }}</h2>
+      <p>{{ t("index.room_watch_text") }}</p>
+      <a href="/observatory">{{ t("index.room_watch_link") }} →</a>
+    </div>
+  </section>
+
+  <h2 class="feed-title">{{ t("index.all_title") }}</h2>
   <p class="lede">{{ t("index.all_lede") }}</p>
 {% endif %}
 
@@ -61,11 +108,13 @@
     <div class="issue-title">{{ i.title }}</div>
     <div class="issue-meta">
       {{ tn("index.row_ballots", i.ballots) }} ·
+      {% if i.agent_comments %}{{ tn("index.row_agent_comments", i.agent_comments) }} ·{% endif %}
       {{ tn("index.row_comments", i.comment_count) }} ·
       {% if i.is_open %}{{ t("index.row_closes", date=i.closes_at.strftime('%-d %B')) }}
       {% else %}{{ t("index.row_closed", date=i.closes_at.strftime('%-d %B')) }}{% endif %} ·
       {{ t("index.row_posted_by", author=i.author) }}
       {% if i.forum_name and not forum %}· <span class="forum-tag">{{ i.forum_name }}</span>{% endif %}
+      {% if i.url %}· <span class="link-tag">↗ {{ i.url | host }}</span>{% endif %}
     </div>
     {% if i.ballots %}
       <div class="spark">
@@ -114,7 +163,7 @@
   <div class="rail-card">
     <h2>{{ t("index.rail_title") }}</h2>
     {% for f in (forums | sort(attribute='open_ballots', reverse=true))[:5] %}
-      {% set b = badge(f.slug, f.name) %}
+      {% set b = badge(f.slug, f.name, f.iso) %}
       <a href="/f/{{ f.slug }}" class="rail-row">
         <span class="avatar big" style="--h: {{ b.hue }}">{{ b.code }}</span>
         <span><span class="rail-name">{{ f.name }}</span>

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=t("thread_new.title")) }}{% endblock %}
+{% block content %}
+
+<header class="page-hero">
+  <p class="crumbs"><a href="/observatory">{{ t("observatory.title") }}</a></p>
+  <h1>{{ t("thread_new.title") }}</h1>
+  <p class="lede">{{ t("thread_new.lede") }}</p>
+</header>
+
+<p class="issue-meta">{{ t("new_question.posting_as", username=user.username) }}</p>
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+
+<form class="card" method="post" action="/observatory/new">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label for="title">{{ t("thread_new.title_label") }}</label>
+  <input id="title" name="title" maxlength="200" required minlength="5"
+         value="{{ form.title or '' }}" placeholder="{{ t("thread_new.title_placeholder") }}">
+  <label for="body">{{ t("thread_new.body_label") }}</label>
+  <textarea id="body" name="body" maxlength="8000" required
+            placeholder="{{ t("thread_new.body_placeholder") }}">{{ form.body or '' }}</textarea>
+  <div class="hint">{{ t("thread_new.body_hint") }}</div>
+  <button type="submit">{{ t("thread_new.submit") }}</button>
+</form>
+{% endblock %}

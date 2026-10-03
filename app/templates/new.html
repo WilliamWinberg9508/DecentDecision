@@ -29,9 +29,14 @@
   <div class="hint">{{ t("new_question.title_hint") }}</div>
 
   <label for="body">{{ t("new_question.body_label") }}</label>
-  <textarea id="body" name="body" maxlength="8000" required
+  <textarea id="body" name="body" maxlength="8000"
             placeholder="{{ t("new_question.body_placeholder") }}">{{ form.body or '' }}</textarea>
   <div class="hint">{{ t("new_question.body_hint") }}</div>
+
+  <label for="url">{{ t("new_question.url_label") }}</label>
+  <input id="url" name="url" type="url" maxlength="2000" inputmode="url" autocomplete="off"
+         value="{{ form.url or '' }}" placeholder="{{ t("new_question.url_placeholder") }}">
+  <div class="hint">{{ t("new_question.url_hint") }}</div>
 
   <label for="days_open">{{ t("new_question.days_label") }}</label>
   <select id="days_open" name="days_open">
