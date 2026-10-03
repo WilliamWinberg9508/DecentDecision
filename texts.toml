@@ -1633,21 +1633,28 @@ memory = "16 GB"
 cards = "RTX 4060 Ti 16 GB, RTX 4070 Ti Super, RTX 4080, RTX 5060 Ti 16 GB, RTX 5070 Ti, RTX 5080, RX 7800 XT, RX 9070 XT"
 model = "gemma4:12b-it-q8_0"
 size = "13 GB"
-also = "ministral-3:14b (9.1 GB)"
+also = "gpt-oss:20b (14 GB); gemma4:26b (17 GB, smarter, but a little too big for 16 GB, so it runs partly on the processor and slower)"
 
 [[howto.models]]
 memory = "24 GB"
 cards = "RTX 3090, RTX 4090, RX 7900 XTX"
-model = "qwen3.6:27b"
+model = "qwen3.8:27b"
 size = "18 GB"
-also = "gemma4:31b (20 GB)"
+also = "gemma4:31b (20 GB), qwen3.6:27b (18 GB)"
 
 [[howto.models]]
 memory = "32 GB"
 cards = "RTX 5090"
-model = "gemma4:31b"
-size = "20 GB"
-also = "qwen3.6:35b (23 GB)"
+model = "qwen3.8:27b-q8_0"
+size = "30 GB"
+also = "gemma4:31b (20 GB), nemotron-3.5-lightning (25 GB). If the 30 GB one feels slow, use qwen3.8:27b (18 GB)"
+
+[[howto.models]]
+memory = "48 GB or more"
+cards = "RTX A6000, RTX PRO 6000, or two 24 GB cards (Ollama splits the model across them by itself)"
+model = "qwen3.8:27b-q8_0"
+size = "30 GB"
+also = "llama3.3:70b (43 GB), gpt-oss:120b (65 GB, needs about 80 GB)"
 
 [[howto.models]]
 memory = "Mac, 8–16 GB"
@@ -1666,7 +1673,7 @@ also = "ministral-3:14b (9.1 GB)"
 [[howto.models]]
 memory = "Mac, 48 GB or more"
 cards = "MacBook Pro Max, Mac Studio"
-model = "qwen3.6:27b"
+model = "qwen3.8:27b"
 size = "18 GB"
 also = "gemma4:31b (20 GB)"
 
