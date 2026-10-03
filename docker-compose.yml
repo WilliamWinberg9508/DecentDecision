@@ -104,6 +104,7 @@ services:
     # without a rebuild. Read-only: the app never writes to it.
     volumes:
       - ./texts.toml:/srv/texts.toml:ro
+      - ./essay.md:/srv/essay.md:ro
     depends_on:
       postgres:
         condition: service_healthy

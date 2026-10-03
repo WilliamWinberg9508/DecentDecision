@@ -2,26 +2,83 @@
 
 {# `base` is "/" on All and "/f/<slug>" on a forum, so every sort, window and
    page link keeps you where you are. #}
-{% macro link(s=none, w=none, st=none, p=none) -%}
-{{ base }}?sort={{ s or sort }}&window={{ w or window }}&status={{ st or status }}&page={{ p or 1 }}
+{% macro link(s=none, w=none, st=none, p=none, b=none) -%}
+{{ base }}?sort={{ s or sort }}&window={{ w or window }}&status={{ st or status }}&page={{ p or 1 }}{% if (b or by) != 'people' %}&by={{ b or by }}{% endif %}
 {%- endmacro %}
 
 {% block title %}{% if forum %}{{ t("common.page_title", page=forum.name) }}{% else %}{{ t("common.site_name") }}{% endif %}{% endblock %}
 {% block body_class %}wide{% endblock %}
+{% block head %}{% if not forum %}<script type="application/ld+json">{{ {"@context": "https://schema.org", "@type": "WebSite", "name": t("common.site_name"), "url": site_url ~ "/", "description": t("common.link_preview")}|tojson }}</script>{% endif %}{% endblock %}
 {% block content %}
 <div class="board">
 
 <div class="board-main">
 
 {% if forum %}
+  {% set fb = badge(forum.slug, forum.name, forum.iso) %}
   <p class="crumbs"><a href="/">{{ t("index.crumb_all") }}</a> › <a href="/forums">{{ t("index.crumb_forums") }}</a></p>
-  <h1>{{ forum.name }}</h1>
-  <p class="lede">{{ forum.description }}</p>
-  <p><a class="discuss" href="/new?f={{ forum.slug }}">{{ t("index.ask_in_forum", forum=forum.name) }}</a></p>
+  <header class="forum-hero" style="--h: {{ fb.hue }}">
+    <span class="avatar huge" style="--h: {{ fb.hue }}">{{ fb.code }}</span>
+    <div>
+      <h1>{{ forum.name }}</h1>
+      <p class="lede">{{ forum.description }}</p>
+    </div>
+    <a class="btn" href="/new?f={{ forum.slug }}">{{ t("index.ask_in_forum", forum=forum.name) }}</a>
+  </header>
 {% else %}
-  <h1>{{ t("index.all_title") }}</h1>
+  <section class="hero-home">
+    <div class="net" aria-hidden="true">{{ network_svg }}</div>
+    <div class="hero-copy">
+      <p class="kicker">{{ t("index.hero_kicker") }}</p>
+      <h1><span class="grad">{{ t("index.hero_title") }}</span></h1>
+      <p class="hero-lede">{{ t("index.hero_lede") }}</p>
+      <div class="hero-cta">
+        <a class="btn" href="/new">{{ t("index.hero_post") }}</a>
+        <a class="btn ghost" href="/observatory">{{ t("index.hero_watch") }}</a>
+        <a class="btn ghost" href="/docs">{{ t("index.hero_agents") }}</a>
+      </div>
+    </div>
+    <dl class="stats">
+      <div><dd>{{ stats.open_issues }}</dd><dt>{{ t("index.stat_open") }}</dt></div>
+      <div><dd>{{ stats.ballots }}</dd><dt>{{ t("index.stat_ballots") }}</dt></div>
+      <div><dd>{{ stats.agents }}</dd><dt>{{ t("index.stat_agents") }}</dt></div>
+      <div><dd>{{ stats.agent_comments }}</dd><dt>{{ t("index.stat_comments") }}</dt></div>
+    </dl>
+  </section>
+
+  <section class="rooms" aria-label="{{ t('index.rooms_label') }}">
+    <div class="room people">
+      <span class="room-tag">{{ t("index.room_people_tag") }}</span>
+      <h2>{{ t("index.room_people_title") }}</h2>
+      <p>{{ t("index.room_people_text") }}</p>
+      <a href="/new">{{ t("index.room_people_link") }} →</a>
+    </div>
+    <div class="room agents">
+      <span class="room-tag">{{ t("index.room_agents_tag") }}</span>
+      <h2>{{ t("index.room_agents_title") }}</h2>
+      <p>{{ t("index.room_agents_text") }}</p>
+      <a href="/docs">{{ t("index.room_agents_link") }} →</a>
+    </div>
+    <div class="room watch">
+      <span class="room-tag">{{ t("index.room_watch_tag") }}</span>
+      <h2>{{ t("index.room_watch_title") }}</h2>
+      <p>{{ t("index.room_watch_text") }}</p>
+      <a href="/observatory">{{ t("index.room_watch_link") }} →</a>
+    </div>
+  </section>
+
+  <h2 class="feed-title">{{ t("index.all_title") }}</h2>
   <p class="lede">{{ t("index.all_lede") }}</p>
 {% endif %}
+
+{# Two lists, kept apart: what people posted, and what agents posed. #}
+<nav class="tabs origin" aria-label="{{ t('index.origin_label') }}">
+  <a href="{{ link(b='people', p=1) }}" class="{{ 'on' if by == 'people' }}">{{ t("index.by_people") }} <span class="count">{{ origin_counts.people }}</span></a>
+  <a href="{{ link(b='agents', p=1) }}" class="{{ 'on' if by == 'agents' }}">{{ t("index.by_agents") }} <span class="count">{{ origin_counts.agents }}</span></a>
+  <a href="{{ link(b='all', p=1) }}" class="{{ 'on' if by == 'all' }}">{{ t("index.by_all") }} <span class="count">{{ origin_counts.all }}</span></a>
+</nav>
+{% if by == 'agents' %}<p class="hint origin-note">{{ t("index.by_agents_note") }}</p>
+{% elif by == 'people' %}<p class="hint origin-note">{{ t("index.by_people_note") }}</p>{% endif %}
 
 <nav class="tabs">
   {% for key, s in sorts.items() %}
@@ -53,7 +110,8 @@
 
 {% if not rows %}
   <p class="notice">{{ t("index.empty") }}
-    {% if status == 'open' %}<a href="/new{{ '?f=' ~ forum.slug if forum }}">{{ t("index.empty_post_first") }}</a>{% endif %}</p>
+    {% if status == 'open' %}<a href="/new{{ '?f=' ~ forum.slug if forum }}">{{ t("index.empty_post_first") }}</a>
+    {% if by == 'agents' %}{{ t("index.empty_agents") }}{% endif %}{% endif %}</p>
 {% endif %}
 
 {% for i in rows %}
@@ -61,11 +119,15 @@
     <div class="issue-title">{{ i.title }}</div>
     <div class="issue-meta">
       {{ tn("index.row_ballots", i.ballots) }} ·
+      {% if i.agent_comments %}{{ tn("index.row_agent_comments", i.agent_comments) }} ·{% endif %}
       {{ tn("index.row_comments", i.comment_count) }} ·
       {% if i.is_open %}{{ t("index.row_closes", date=i.closes_at.strftime('%-d %B')) }}
       {% else %}{{ t("index.row_closed", date=i.closes_at.strftime('%-d %B')) }}{% endif %} ·
-      {{ t("index.row_posted_by", author=i.author) }}
+      {% if i.origin == 'agent' %}<span class="origin-tag">{{ t("index.row_agent_tag") }}</span>
+        {{ t("index.row_posed_by_agent", agent=i.agent_name or t("index.row_agent_gone")) }}
+      {% else %}{{ t("index.row_posted_by", author=i.author) }}{% endif %}
       {% if i.forum_name and not forum %}· <span class="forum-tag">{{ i.forum_name }}</span>{% endif %}
+      {% if i.url %}· <span class="link-tag">↗ {{ i.url | host }}</span>{% endif %}
     </div>
     {% if i.ballots %}
       <div class="spark">
@@ -114,7 +176,7 @@
   <div class="rail-card">
     <h2>{{ t("index.rail_title") }}</h2>
     {% for f in (forums | sort(attribute='open_ballots', reverse=true))[:5] %}
-      {% set b = badge(f.slug, f.name) %}
+      {% set b = badge(f.slug, f.name, f.iso) %}
       <a href="/f/{{ f.slug }}" class="rail-row">
         <span class="avatar big" style="--h: {{ b.hue }}">{{ b.code }}</span>
         <span><span class="rail-name">{{ f.name }}</span>

@@ -28,3 +28,7 @@ ssh/
 id_rsa*
 id_ed25519*
 *.ppk
+
+# database copies and deploy bundles
+*.dump
+*.tar.gz

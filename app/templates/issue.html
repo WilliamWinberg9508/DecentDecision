@@ -2,6 +2,10 @@
 {# If the title is the reason it was removed, the page title must not serve it
    either — the tab, the browser history and any link preview all read this. #}
 {% block title %}{% if removed and not may_see %}{{ t("common.page_title", page=t("issue.removed_title")) }}{% else %}{{ t("common.page_title", page=issue.title) }}{% endif %}{% endblock %}
+{% block robots %}{% if removed %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}{% if removed and not may_see %}{{ t("issue.removed_title") }}{% else %}{{ issue.title }}{% endif %}{% endblock %}
+{% block og_description %}{% if removed and not may_see %}{{ t("common.link_preview") }}{% elif issue.body %}{{ issue.body|truncate(200) }}{% else %}{{ t("common.link_preview") }}{% endif %}{% endblock %}
 {% block content %}
 
 {% if removed and not may_see %}
@@ -36,25 +40,52 @@
 
 <header class="q-hero">
   {% if issue.forum_slug %}
-    {% set b = badge(issue.forum_slug, issue.forum_name) %}
-    <a class="q-forum" href="/f/{{ issue.forum_slug }}">
+    {% set b = badge(issue.forum_slug, issue.forum_name, issue.forum_iso) %}
+    <a class="q-forum" href="{{ '/observatory' if is_thread else '/f/' ~ issue.forum_slug }}">
       <span class="avatar" style="--h: {{ b.hue }}">{{ b.code }}</span>{{ issue.forum_name }}</a>
   {% endif %}
   <h1>{{ issue.title }}</h1>
   <div class="q-chips">
-    <span class="chip {{ 'live' if is_open else 'done' }}"><i></i>
-      {% if is_open %}{{ t("issue.chip_open", date=issue.closes_at.strftime('%-d %B')) }}
-      {% else %}{{ t("issue.chip_closed", date=issue.closes_at.strftime('%-d %B %Y')) }}{% endif %}</span>
-    <span class="chip">{{ tn("issue.ballots", total) }}</span>
-    <span class="chip">{{ t("issue.asked_by", author=issue.author) }}</span>
+    {% if is_thread %}
+      <span class="chip">{{ t("issue.thread_chip") }}</span>
+      <span class="chip">{{ t("issue.posted_by", author=issue.author) }}</span>
+      {% if issue.edited_at %}<span class="chip">{{ t("issue.edited_chip_thread", date=issue.edited_at.strftime('%-d %B')) }}</span>{% endif %}
+      {% if may_edit %}<a class="chip edit-chip" href="/i/{{ issue.id }}/edit">{{ t("issue.edit_link") }}</a>{% endif %}
+    {% else %}
+      <span class="chip {{ 'live' if is_open else 'done' }}"><i></i>
+        {% if is_open %}{{ t("issue.chip_open", date=issue.closes_at.strftime('%-d %B')) }}
+        {% else %}{{ t("issue.chip_closed", date=issue.closes_at.strftime('%-d %B %Y')) }}{% endif %}</span>
+      <span class="chip">{{ tn("issue.ballots", total) }}</span>
+      {% if issue.origin == 'agent' %}
+        <span class="chip agent-chip">{{ t("issue.posed_by_agent_tag") }}
+          {% if issue.agent_id %}<a href="/agents/{{ issue.agent_id }}">{{ issue.agent_name }}</a>{% else %}{{ t("index.row_agent_gone") }}{% endif %}</span>
+      {% else %}
+        <span class="chip">{{ t("issue.asked_by", author=issue.author) }}</span>
+      {% endif %}
+      {% if issue.edited_at %}<span class="chip">{{ t("issue.edited_chip", date=issue.edited_at.strftime('%-d %B')) }}</span>{% endif %}
+      {% if may_edit %}<a class="chip edit-chip" href="/i/{{ issue.id }}/edit">{{ t("issue.edit_link") }}</a>{% endif %}
+      {% if issue.url %}<span class="chip link">↗ {{ issue.url | host }}</span>{% endif %}
+    {% endif %}
   </div>
 </header>
 
+{% if issue.body or issue.url %}
 <div class="proposal">
-  <span class="eyebrow">{{ t("issue.proposal_eyebrow") }}</span>
-  <p>{{ issue.body }}</p>
+  <span class="eyebrow">{{ t("issue.thread_eyebrow") if is_thread else t("issue.proposal_eyebrow") }}</span>
+  {% if issue.body %}<p>{{ issue.body }}</p>{% endif %}
+  {% if issue.url %}
+    {# Shown as a link and never fetched by the server. nofollow/ugc because a
+       stranger chose it; noreferrer so their site learns nothing from us. #}
+    <a class="linkcard" href="{{ issue.url }}" target="_blank" rel="nofollow ugc noopener noreferrer">
+      <span class="lc-host">↗ {{ issue.url | host }}</span>
+      <span class="lc-url">{{ issue.url | truncate(110) }}</span>
+      <span class="lc-note">{{ t("issue.link_note") }}</span>
+    </a>
+  {% endif %}
 </div>
+{% endif %}
 
+{% if not is_thread %}
 {% macro cell(q) %}
   <div class="cell {{ q[0] }} {{ 'empty' if not q[3] }} {{ 'lead' if total and not tied and q[0] == top[0] }}">
     <div class="cell-top"><i class="dot {{ q[0] }}"></i>{{ q[1] }}
@@ -107,12 +138,33 @@
   </div>
 </section>
 
+{# What the discussion changed. The independent result above is every ballot
+   exactly as it was cast; this is the same ballots with each revision swapped
+   in. Shown only once somebody has revised. #}
+{% if after and after.revised %}
+  {% set ind = after.independent %}{% set dis = after.after_discussion %}
+  <section class="after">
+    <span class="eyebrow">{{ t("issue.after_eyebrow") }}</span>
+    <p class="after-lede">{% if after.changed %}{{ tn("issue.after_changed", after.changed) }}{% else %}{{ t("issue.after_none_changed") }}{% endif %} {{ tn("issue.after_revised", after.revised) }}</p>
+    <div class="after-grid">
+      {% for k in ['supported', 'contested', 'opposed', 'irrelevant'] %}
+        <div class="after-cell {{ k }}">
+          <i class="dot {{ k }}"></i><span>{{ t("issue.quadrant_" ~ k) }}</span>
+          <b>{{ ind[k] }} <em>→</em> {{ dis[k] }}</b>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
 
 
 {# Below the tally, above the motivations: the discussion is about what the
    models said, so the button sits between the numbers and the reasoning.
    It is a link to a fragment, and the overlay opens on :target -- no
    JavaScript, and the discussion has a URL you can send someone. #}
+{% endif %}{# not is_thread #}
+
 <a class="discuss-card" href="#discuss">
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
   <span><b>{% if issue.comment_count %}{{ tn("issue.discuss_with_comments", issue.comment_count) }}{% else %}{{ t("issue.discuss") }}{% endif %}</b>
@@ -120,7 +172,7 @@
   <span class="go">{{ t("issue.discuss_open") }}</span>
 </a>
 
-{% if total %}
+{% if total and not is_thread %}
 
 <h2 class="sec">{{ t("issue.by_model_heading") }}</h2>
 <p class="lede">{{ t("issue.by_model_lede") }}</p>
@@ -151,9 +203,15 @@
     <div class="ballot-head">
       <span class="tag {{ v.quadrant }}"><i class="dot {{ v.quadrant }}"></i>{{ quadrant_word(v.quadrant) }}</span>
       <span class="model-chip">{{ v.model_name }}</span>
-      <span class="who">{{ t("issue.ballot_who", agent=v.agent, operator=v.operator) }}</span>
+      <span class="who"><a href="/agents/{{ v.agent_id }}">{{ v.agent }}</a> · {{ t("issue.ballot_operator", operator=v.operator) }}</span>
     </div>
     {% if v.rationale %}<p class="why">{{ v.rationale }}</p>{% endif %}
+    {% if v.revised %}
+      <div class="revision {{ v.r_quadrant }}">
+        <span class="tag {{ v.r_quadrant }}"><i class="dot {{ v.r_quadrant }}"></i>{{ t("issue.revised_to", reading=quadrant_word(v.r_quadrant)) if v.changed else t("issue.revised_same") }}</span>
+        {% if v.r_rationale %}<p class="why">{{ v.r_rationale }}</p>{% endif %}
+      </div>
+    {% endif %}
     {% if is_admin %}
       <form method="post" action="/vote/{{ v.id }}/remove">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -201,6 +259,8 @@
     </form>
   {% endif %}
 {% endif %}
+
+{% if not is_thread %}{% include "_agent_thread.html" %}{% endif %}
 
 {% include "_comments.html" %}
 

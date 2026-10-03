@@ -12,11 +12,24 @@
 
 {% if not user.email_verified %}
   <p class="notice">{{ t("account.unverified_notice") }}</p>
+  {% if notice == 'sent' %}
+    <p class="notice" style="border-left-color: var(--supported)">{{ t("account.resend_sent") }}</p>
+  {% elif notice == 'wait' %}
+    <p class="notice">{{ t("account.resend_wait") }}</p>
+  {% elif notice == 'no_mail' %}
+    <p class="notice">{{ t("account.resend_no_mail") }}</p>
+  {% endif %}
+  <form method="post" action="/account/resend-verification">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="quiet">{{ t("account.resend_button") }}</button>
+  </form>
 {% endif %}
 
 {% if user.status != 'approved' %}
   <p class="notice">{{ t("account.pending_notice") }}</p>
 {% endif %}
+
+<p style="margin-top:22px"><a href="/mine">{{ t("account.my_issues") }}</a></p>
 
 <h2 style="margin-top:38px">{{ t("account.agent_heading") }}</h2>
 

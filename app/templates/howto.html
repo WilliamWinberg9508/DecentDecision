@@ -3,6 +3,7 @@
 {% block content %}
 
 <h1>{{ t("howto.title") }}</h1>
+<p class="essay-note">{{ t("howto.essay_note") }}</p>
 <p class="lede">{{ t("howto.lede") }}</p>
 
 <nav class="toc card">
@@ -12,6 +13,7 @@
   <a href="#models">{{ t("howto.toc_models") }}</a>
   <a href="#options">{{ t("howto.toc_options") }}</a>
   <a href="#api">{{ t("howto.toc_api") }}</a>
+  {% if repo_url %}<a href="#source">{{ t("howto.toc_source") }}</a>{% endif %}
 </nav>
 
 <h2 class="sec" id="signup">{{ t("howto.signup_heading") }}</h2>
@@ -93,6 +95,10 @@
       <td>{{ t("howto.option_model") }}</td></tr>
   <tr><td class="nowrap"><code>{{ t("howto.option_steady_cmd") }}</code></td>
       <td>{{ t("howto.option_steady") }}</td></tr>
+  <tr><td class="nowrap"><code>{{ t("howto.option_nodiscuss_cmd") }}</code></td>
+      <td>{{ t("howto.option_nodiscuss") }}</td></tr>
+  <tr><td class="nowrap"><code>{{ t("howto.option_pose_cmd") }}</code></td>
+      <td>{{ t("howto.option_pose") }}</td></tr>
 </table>
 </div>
 <h2 class="sec" id="api">{{ t("howto.api_heading") }}</h2>
@@ -101,8 +107,22 @@
   <li><p>{{ t("howto.api_step1") }}</p><pre class="cmd">{{ t("howto.api_step1_cmd", site=site_url) }}</pre></li>
   <li><p>{{ t("howto.api_step2") }}</p><pre class="cmd">{{ t("howto.api_step2_cmd", site=site_url) }}</pre></li>
   <li><p>{{ t("howto.api_step3") }}</p><pre class="cmd">{{ t("howto.api_step3_cmd", site=site_url) }}</pre></li>
+  <li><p>{{ t("howto.api_step4") }}</p><pre class="cmd">{{ t("howto.api_step4_cmd", site=site_url) }}</pre></li>
+  <li><p>{{ t("howto.api_step5") }}</p><pre class="cmd">{{ t("howto.api_step5_cmd", site=site_url) }}</pre></li>
+  <li><p>{{ t("howto.api_step6") }}</p><pre class="cmd">{{ t("howto.api_step6_cmd", site=site_url) }}</pre></li>
+  <li><p>{{ t("howto.api_step7") }}</p><pre class="cmd">{{ t("howto.api_step7_cmd", site=site_url) }}</pre></li>
 </ol>
 <p class="hint">{{ t("howto.api_note") }}</p>
+{% if btc_address %}<p class="hint">{{ t("howto.api_donate", site=site_url) }}</p>{% endif %}
+
+{% if repo_url %}
+<h2 class="sec" id="source">{{ t("howto.source_heading") }}</h2>
+<div class="card">
+  <p>{{ t("howto.source_lede") }}</p>
+  <p><a class="btn" href="{{ repo_url }}" rel="noopener">{{ t("howto.source_link") }}</a></p>
+  <p class="hint">{{ t("howto.source_note") }}</p>
+</div>
+{% endif %}
 
 <div class="notice" style="margin-top:28px">{{ t("howto.privacy") }}</div>
 

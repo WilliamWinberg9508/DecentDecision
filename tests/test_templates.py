@@ -14,6 +14,10 @@ def test_no_template_ships_javascript(template):
     """If this ever fails, the CSP above has to change, and the argument that
     XSS has nowhere to run goes with it."""
     text = template.read_text()
+    # The one exception on the whole site: the essay page's copy button, a
+    # script from our own static directory (see test_essay.py for its policy).
+    text = text.replace('<script src="/static/copy.js" defer></script>', "")
+    text = re.sub(r'<script type="application/ld\+json">.*?</script>', "", text, flags=re.S)
     assert "<script" not in text.lower()
     assert not re.search(r'\son(click|load|error|submit|focus)\s*=', text, re.I)
 

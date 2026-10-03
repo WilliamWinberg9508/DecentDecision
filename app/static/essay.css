@@ -1,0 +1,320 @@
+/* The essay page. Loaded on /essay only, and no script runs there: every
+   moving part is CSS. The page goes from night to dawn as you read, which is
+   the essay's own argument -- fear first, then the way out of it.
+   Scroll-driven effects sit under @supports, so a browser without them just
+   shows the finished page. */
+
+body.essay-page {
+  --paper: #080a17; --card: #10142b; --ink: #e9e9f7; --muted: #9ba2cf;
+  --line: #252a55; --accent: #a9b8ff; --hover: rgb(255 255 255 / .07);
+  --indigo: #5b6cff; --violet: #d98bff; --rose: #e0568c; --ember: #ff8a4c; --gold: #ffc46b;
+  background: var(--paper);
+}
+
+/* A field of stars, twinkling a little. Two tiles of different sizes drift in
+   and out of phase so it never looks like a pattern. */
+body.essay-page::before, body.essay-page::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+}
+body.essay-page::before {
+  background-image:
+    radial-gradient(1px 1px at 25px 35px, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 92px 128px, #cfd8ff, transparent),
+    radial-gradient(1px 1px at 168px 72px, #fff, transparent),
+    radial-gradient(1px 1px at 228px 196px, #ffe9c4, transparent);
+  background-size: 260px 240px; opacity: .55; animation: twinkle 7s ease-in-out infinite alternate;
+}
+body.essay-page::after {
+  background-image:
+    radial-gradient(1px 1px at 60px 90px, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 190px 40px, #d9c9ff, transparent),
+    radial-gradient(1px 1px at 120px 210px, #fff, transparent);
+  background-size: 340px 300px; opacity: .3; animation: twinkle 11s ease-in-out -4s infinite alternate;
+}
+@keyframes twinkle { from { opacity: .2 } to { opacity: .75 } }
+body.essay-page .page { position: relative; z-index: 1; }
+
+body.essay-page header.site {
+  background: rgb(8 10 23 / .72); backdrop-filter: blur(10px);
+  border-bottom-color: rgb(255 255 255 / .08);
+}
+body.essay-page main.wrap { max-width: none; padding: 0; }
+body.essay-page footer.site { background: transparent; }
+
+/* --- reading progress: a bar under the header that fills as you scroll ------- */
+.progress { display: none; }
+@supports (animation-timeline: scroll()) {
+  .progress {
+    display: block; position: fixed; top: 64px; left: 0; right: 0; height: 3px; z-index: 39;
+    background: linear-gradient(90deg, var(--indigo), var(--violet), var(--ember), var(--gold));
+    box-shadow: 0 0 14px rgb(255 196 107 / .55);
+    clip-path: inset(0 100% 0 0);
+    animation: fill linear both; animation-timeline: scroll(root);
+  }
+  @keyframes fill { to { clip-path: inset(0 0 0 0); } }
+}
+
+/* --- the opening screen ------------------------------------------------------- */
+.hero {
+  position: relative; isolation: isolate; overflow: hidden; text-align: center;
+  min-height: min(88vh, 760px); display: grid; place-items: center;
+  padding: 70px 20px 130px;
+}
+.hero::after {                                     /* melts into the page */
+  content: ""; position: absolute; inset: auto 0 0 0; height: 180px; z-index: -1;
+  background: linear-gradient(transparent, var(--paper));
+}
+.hero .web { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; }
+.hero::before {                                    /* a calm pool of light behind the title */
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: radial-gradient(ellipse 55% 45% at 50% 50%, rgb(8 10 23 / .78), transparent 75%);
+}
+.hero .kicker {
+  margin: 0 0 24px; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted);
+}
+.hero h1 { margin: 0; line-height: .98; letter-spacing: -.025em; }
+.hero h1 .main {
+  display: block; font-size: clamp(54px, 11vw, 132px); font-weight: 700; padding-bottom: .06em;
+  background: linear-gradient(100deg, #8fa0ff 0%, var(--violet) 16.6%, #ff9ab0 33.3%, var(--gold) 41.6%,
+              #ff9ab0 50%, var(--violet) 66.6%, #8fa0ff 83.3%, #8fa0ff 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: sheen 10s linear infinite;
+  filter: drop-shadow(0 0 28px rgb(217 139 255 / .35));
+}
+@keyframes sheen { to { background-position: 100% 0; } }
+.hero h1 .sub {
+  display: block; margin-top: 20px; font-size: clamp(19px, 3.2vw, 32px);
+  font-weight: 400; font-style: italic; letter-spacing: 0; color: var(--ink);
+}
+.hero .byline { margin: 26px 0 0; color: var(--gold); font-size: 15px; letter-spacing: .12em; }
+.hero .cue {
+  position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); text-decoration: none;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted);
+}
+.hero .cue i {
+  width: 12px; height: 12px; border-right: 2px solid var(--gold); border-bottom: 2px solid var(--gold);
+  transform: rotate(45deg); animation: nudge 2.2s ease-in-out infinite;
+}
+@keyframes nudge { 50% { transform: translateY(8px) rotate(45deg); opacity: .4; } }
+
+/* The network behind the title: an idea reaching everyone. Each person lights
+   up when the wave arrives (--d is how far they are from the middle) and
+   fades again, then the next wave goes out. */
+.web .e { stroke: #4351a6; stroke-width: 1; stroke-opacity: .45; animation: edge 14s ease-in-out infinite; animation-delay: var(--d); }
+.web .n { fill: #5864b8; transform-box: fill-box; transform-origin: center; animation: node 14s ease-in-out infinite; animation-delay: var(--d); }
+.web .h { fill: var(--gold); opacity: 0; transform-box: fill-box; transform-origin: center; animation: halo 14s ease-in-out infinite; animation-delay: var(--d); }
+.web .ring {
+  fill: none; stroke: var(--gold); stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: 0;
+  transform-box: fill-box; transform-origin: center; animation: ring 7s ease-out infinite; animation-delay: calc(var(--k) * 2.3s);
+}
+@keyframes node {
+  0%, 100% { fill: #5864b8; transform: scale(1); }
+  5%       { fill: #fff3cf; transform: scale(2.1); }
+  14%, 58% { fill: var(--gold); transform: scale(1.35); }
+  80%      { fill: #5864b8; transform: scale(1); }
+}
+@keyframes halo { 0%, 100% { opacity: 0; transform: scale(.4); } 6% { opacity: .5; transform: scale(1.5); } 16%, 56% { opacity: .22; transform: scale(1); } 80% { opacity: 0; } }
+@keyframes edge { 0%, 100% { stroke: #4351a6; stroke-opacity: .45; } 8%, 56% { stroke: var(--gold); stroke-opacity: .7; } 82% { stroke: #4351a6; stroke-opacity: .45; } }
+@keyframes ring { from { transform: scale(.1); opacity: .8; } to { transform: scale(26); opacity: 0; } }
+
+/* --- the author's note -------------------------------------------------------- */
+.letter {
+  position: relative; max-width: 720px; margin: -50px auto 90px; padding: 34px 38px 22px;
+  border-radius: 22px; border: 1px solid rgb(255 255 255 / .12);
+  background: linear-gradient(150deg, rgb(255 255 255 / .09), rgb(255 255 255 / .02));
+  backdrop-filter: blur(8px);
+  box-shadow: 0 40px 90px rgb(0 0 0 / .5), inset 0 1px 0 rgb(255 255 255 / .1);
+}
+.letter .label {
+  position: absolute; top: -13px; left: 30px; padding: 4px 14px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--rose), var(--ember)); color: #fff;
+  font-size: 11px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700;
+}
+.letter p { margin: 0 0 16px; font: 17px/1.7 Georgia, "Iowan Old Style", serif; color: #d2d6f3; }
+@media (max-width: 620px) { .letter { margin: -30px 14px 60px; padding: 30px 22px 14px; } }
+
+/* --- the essay ---------------------------------------------------------------- */
+.essay-body {
+  max-width: 700px; margin: 0 auto; padding: 0 22px 30px;
+  font: 19px/1.85 Georgia, "Iowan Old Style", "Times New Roman", serif; color: #dcdff5;
+}
+.essay-body p { margin: 0 0 1.25em; }
+.essay-body > p:first-child { font-size: 1.32em; line-height: 1.6; color: #fff; }
+.essay-body strong { color: #fff; }
+.essay-body a { color: #b9c4ff; text-decoration-color: rgb(185 196 255 / .4); text-underline-offset: 3px; }
+.essay-body a:hover { color: var(--gold); text-decoration-color: var(--gold); }
+.essay-body h2 {
+  margin: 96px 0 26px; font-size: clamp(30px, 4.6vw, 44px); line-height: 1.12; letter-spacing: -.015em; color: #fff;
+}
+.essay-body h2::before {
+  content: ""; display: block; width: 58px; height: 4px; border-radius: 4px; margin-bottom: 20px;
+  background: linear-gradient(90deg, var(--indigo), var(--gold)); box-shadow: 0 0 20px rgb(255 196 107 / .55);
+}
+.essay-body code {
+  font: .84em ui-monospace, SFMono-Regular, Consolas, monospace; padding: 2px 7px; border-radius: 6px;
+  background: rgb(255 255 255 / .08); color: #ffe1a8; overflow-wrap: anywhere;
+}
+.essay-body hr {
+  border: 0; height: 1px; margin: 70px 0; overflow: visible; position: relative;
+  background: linear-gradient(90deg, transparent, #5b6cff, transparent);
+}
+.essay-body hr::after {
+  content: ""; position: absolute; left: 50%; top: -5px; width: 11px; height: 11px; margin-left: -5.5px;
+  border-radius: 50%; background: var(--gold); box-shadow: 0 0 18px 5px rgb(255 196 107 / .55);
+}
+
+/* Tables: glass panels that scroll sideways on a phone. */
+.essay-body .scroll {
+  margin: 34px -14px; border-radius: 18px; border: 1px solid rgb(255 255 255 / .1);
+  background: rgb(255 255 255 / .035); box-shadow: 0 24px 70px rgb(0 0 0 / .4);
+}
+.essay-body table { min-width: 560px; font: 14.5px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+.essay-body th {
+  padding: 15px 18px; color: var(--gold); font-size: 11px; letter-spacing: .14em;
+  border-bottom: 1px solid rgb(255 255 255 / .14);
+}
+.essay-body td { padding: 12px 18px; border-bottom: 1px solid rgb(255 255 255 / .06); vertical-align: top; color: #d9dcf2; }
+.essay-body td:first-child { color: #fff; font-weight: 600; }
+.essay-body tbody tr { transition: background .2s; }
+.essay-body tbody tr:hover { background: rgb(255 255 255 / .06); }
+.essay-body tbody tr:last-child td { border-bottom: 0; }
+.essay-body td a { overflow-wrap: anywhere; }
+
+/* The two messages, as the chat bubbles they are: the machine's calm, ours not. */
+.essay-body blockquote {
+  position: relative; margin: 30px 0; padding: 18px 24px; max-width: 90%; border-radius: 22px;
+  font: 17px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.essay-body blockquote p { margin: 0; }
+.essay-body blockquote:nth-of-type(odd) {
+  background: linear-gradient(145deg, #1b2a6b, #16205a); border: 1px solid #3a56d6; color: #e1e8ff;
+  border-bottom-left-radius: 6px; box-shadow: 0 14px 40px rgb(40 70 220 / .3);
+}
+.essay-body blockquote:nth-of-type(even) {
+  margin-left: auto; background: linear-gradient(145deg, #5a1730, #451126); border: 1px solid #d0405a;
+  color: #ffe1e6; border-bottom-right-radius: 6px; box-shadow: 0 14px 40px rgb(220 50 80 / .3);
+}
+
+/* Appendix and sources fold away. */
+.fold {
+  margin: 22px 0; border-radius: 18px; border: 1px solid rgb(255 255 255 / .1);
+  background: rgb(255 255 255 / .035);
+}
+.fold > summary {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer;
+  list-style: none; padding: 20px 26px; font-size: 24px; color: #fff;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: "+"; font: 300 30px/1 system-ui; color: var(--gold); transition: transform .25s; }
+.fold[open] > summary::after { transform: rotate(45deg); }
+.fold > summary:hover { background: rgb(255 255 255 / .04); border-radius: 18px; }
+.fold > :not(summary) { margin-inline: 26px; font-size: 16px; line-height: 1.7; }
+.fold > :last-child { margin-bottom: 24px; }
+.fold ol { padding-left: 22px; }
+.fold li { margin-bottom: 8px; overflow-wrap: anywhere; }
+
+/* --- the dawn: the seven steps ------------------------------------------------ */
+.dawn {
+  position: relative; margin: 80px 0 0; padding: 130px 20px 120px; overflow: hidden;
+  background: linear-gradient(180deg, var(--paper) 0%, #1b1450 14%, #5a2a86 32%, #c2457a 54%, #ff8a4c 78%, var(--gold) 100%);
+  color: var(--ink);
+}
+.dawn::before {                                    /* the sun, coming up behind the last step */
+  content: ""; position: absolute; left: 50%; bottom: -260px; width: 900px; height: 900px; margin-left: -450px;
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgb(255 244 205 / .95), rgb(255 196 107 / .55) 38%, transparent 68%);
+  animation: rise-sun 9s ease-in-out infinite alternate;
+}
+@keyframes rise-sun { from { transform: scale(.92); opacity: .75; } to { transform: scale(1.06); opacity: 1; } }
+.dawn-inner { position: relative; max-width: 720px; margin: 0 auto; font-family: Georgia, "Iowan Old Style", serif; }
+.dawn-inner > p:first-child { font-size: 24px; line-height: 1.5; text-align: center; color: #fff; margin: 0 0 40px; }
+
+ol.joke-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+ol.joke-steps li {
+  display: flex; align-items: center; gap: 20px; padding: 20px 26px; border-radius: 20px;
+  background: #fff7e8; color: #2b1a0a; font-size: clamp(19px, 2.6vw, 25px); line-height: 1.35;
+  box-shadow: 0 18px 50px rgb(60 10 50 / .38); transition: transform .25s, box-shadow .25s;
+}
+ol.joke-steps li:hover { transform: translateY(-4px) scale(1.012); box-shadow: 0 26px 60px rgb(60 10 50 / .5); }
+ol.joke-steps .num {
+  flex: none; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%;
+  font: 700 22px/1 -apple-system, "Segoe UI", sans-serif; color: #fff;
+  background: linear-gradient(135deg, var(--rose), var(--ember)); box-shadow: 0 0 0 6px rgb(255 138 76 / .25);
+}
+@media (min-width: 760px) {
+  ol.joke-steps li:nth-child(odd) { margin-right: 44px; }
+  ol.joke-steps li:nth-child(even) { margin-left: 44px; }
+}
+
+.dawn .punch {
+  margin: 90px 0 26px; text-align: center; font-weight: 700; color: #2b1a0a;
+  font-size: clamp(32px, 6vw, 62px); line-height: 1.06; letter-spacing: -.02em;
+}
+.twentyfive {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; width: 190px; margin: 34px auto;
+}
+.twentyfive i {
+  aspect-ratio: 1; border-radius: 50%; background: rgb(43 26 10 / .22);
+  animation: spread 4.8s ease-in-out infinite; animation-delay: var(--d);
+}
+@keyframes spread {
+  0%, 100% { background: rgb(43 26 10 / .22); transform: scale(1); box-shadow: none; }
+  12%, 40% { background: #fff8e6; transform: scale(1.25); box-shadow: 0 0 18px 4px rgb(255 255 255 / .9); }
+  70% { background: rgb(43 26 10 / .22); transform: scale(1); }
+}
+.dawn .sig { text-align: center; font-size: 26px; color: #2b1a0a; margin: 10px 0 0; }
+.dawn .cta-lede {
+  margin: 56px 0 14px; text-align: center; font: 700 12px/1 -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: .3em; text-transform: uppercase; color: #2b1a0a;
+}
+.cta-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.cta-row a {
+  padding: 15px 30px; border-radius: 999px; text-decoration: none; font: 700 16px/1 -apple-system, "Segoe UI", sans-serif;
+  background: #2b1a0a; color: #ffe9bf; border: 2px solid #2b1a0a; transition: transform .2s, box-shadow .2s;
+}
+.cta-row a.alt { background: transparent; color: #2b1a0a; }
+.cta-row a:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgb(60 20 0 / .35); }
+
+.essay-after { padding-top: 70px; }
+
+/* --- things appear as you scroll to them --------------------------------------- */
+@supports (animation-timeline: view()) {
+  .essay-body > p, .essay-body > h2, .essay-body > blockquote, .essay-body .scroll, .fold,
+  .dawn-inner > p, .twentyfive {
+    animation: rise linear both; animation-timeline: view(); animation-range: entry 0% entry 42%;
+  }
+  ol.joke-steps li { animation: step-in linear both; animation-timeline: view(); animation-range: entry 0% entry 55%; }
+  ol.joke-steps li:nth-child(odd)  { --from: -60px; }
+  ol.joke-steps li:nth-child(even) { --from: 60px; }
+  .hero-text { animation: drift linear both; animation-timeline: scroll(root); animation-range: 0 70vh; }
+  @keyframes rise { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
+  @keyframes step-in { from { opacity: 0; transform: translateX(var(--from)) scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes drift { to { opacity: 0; transform: translateY(-60px); } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.essay-page *, body.essay-page::before, body.essay-page::after { animation: none !important; transition: none !important; }
+  .web .n { fill: #8f9be8; }
+  .twentyfive i { background: #fff8e6; }
+}
+
+/* --- the copy button, under the author's note ---------------------------------- */
+.letter .copy { margin: 4px 0 14px; }
+.copy-btn {
+  appearance: none; cursor: pointer; font: 700 13px/1 system-ui, sans-serif; letter-spacing: .06em;
+  padding: 12px 20px; border-radius: 999px; border: 1px solid rgb(255 196 107 / .5);
+  color: #1a1203; background: linear-gradient(90deg, var(--gold), #ffdca1);
+  box-shadow: 0 8px 28px rgb(255 196 107 / .25); transition: transform .15s, box-shadow .15s;
+}
+.copy-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 34px rgb(255 196 107 / .4); }
+.copy-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.copy-btn[hidden] { display: none; }
+.copy-manual { margin-top: 12px; }
+.copy-manual summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.copy-manual textarea {
+  display: block; width: 100%; margin-top: 10px; box-sizing: border-box; resize: vertical;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: #cfd3f0;
+  background: rgb(0 0 0 / .35); border: 1px solid rgb(255 255 255 / .12); border-radius: 12px; padding: 12px;
+}

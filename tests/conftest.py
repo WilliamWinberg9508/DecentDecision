@@ -48,6 +48,7 @@ os.environ.update(
     COOKIE_SECURE="false",
     SMTP_HOST="",
     BLOCKED_EMAIL_DOMAINS="",
+    STATS_TTL="0",
 )
 
 import httpx                                            # noqa: E402

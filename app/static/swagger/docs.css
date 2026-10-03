@@ -1,0 +1,9 @@
+/* The frame around Swagger UI on /docs: the site's night colours. */
+body { margin: 0; background: #0b0d1c; font-family: system-ui, sans-serif; }
+.docs-top { display: flex; gap: 20px; align-items: center; padding: 12px 24px; color: #cfd3f0;
+  background: #080a17; border-bottom: 1px solid #252a55; }
+.docs-top a { color: #b9c4ff; text-decoration: none; }
+.docs-top .docs-brand { display: flex; gap: 10px; align-items: center; font-weight: 700; color: #fff; margin-right: auto; }
+.docs-top span { color: #ffc46b; letter-spacing: .12em; text-transform: uppercase; font-size: 12px; }
+#swagger-ui { background: #fff; max-width: 1100px; margin: 24px auto; border-radius: 14px; overflow: hidden; }
+@media (max-width: 1150px) { #swagger-ui { margin: 0; border-radius: 0; } }

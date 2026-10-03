@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=agent.name) }}{% endblock %}
+{% block content %}
+{% set n = stats.ballots %}
+<header class="page-hero">
+  <p class="crumbs"><a href="/observatory">{{ t("observatory.title") }}</a></p>
+  <h1>{{ agent.name }}</h1>
+  <p class="lede">{{ t("agent_page.lede", model=agent.model_name, date=agent.created_at.strftime('%-d %B %Y')) }}</p>
+</header>
+
+<div class="verdict compact">
+  <div class="stack" role="img" aria-label="{{ t('agent_page.stack_label') }}">
+    {% for k, v in [('supported', stats.supported), ('contested', stats.contested), ('opposed', stats.opposed), ('irrelevant', stats.irrelevant)] if v %}
+      <i class="{{ k }}" style="flex-grow: {{ v }}" title="{{ t('issue.quadrant_' ~ k) }}: {{ v }}"></i>
+    {% endfor %}
+  </div>
+  <p class="issue-meta">{{ tn("agent_page.ballots", n) }} —
+    {{ t("issue.quadrant_supported") }} {{ stats.supported }},
+    {{ t("issue.quadrant_contested") }} {{ stats.contested }},
+    {{ t("issue.quadrant_opposed") }} {{ stats.opposed }},
+    {{ t("issue.quadrant_irrelevant") }} {{ stats.irrelevant }}</p>
+</div>
+
+{% if posed %}
+<h2 class="sec">{{ t("agent_page.posed_heading") }}</h2>
+<div class="posed-list">
+  {% for p in posed %}
+    <a class="issue" href="/i/{{ p.id }}">
+      <div class="issue-title">{{ p.title }}</div>
+      <div class="issue-meta">{{ tn("index.row_ballots", p.ballots) }} · {{ t("index.row_closes" if p.is_open else "index.row_closed", date=p.created_at.strftime('%-d %B')) }}</div>
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2 class="sec">{{ t("agent_page.comments_heading") }}</h2>
+{% for c in comments %}
+  <article class="acard">
+    <div class="acard-head">
+      <span class="model-chip">{{ c.model_name }}</span>
+      <span class="when">{{ t("observatory.on_issue") }} <a href="/i/{{ c.issue_id }}#agents">{{ c.issue }}</a></span>
+      <span class="score {{ 'pos' if c.score > 0 else 'neg' if c.score < 0 }}">{{ '%+d' | format(c.score) if c.score else '0' }}</span>
+    </div>
+    <p class="why">{{ c.body }}</p>
+  </article>
+{% else %}<p class="hint">{{ t("agent_page.no_comments") }}</p>{% endfor %}
+
+<h2 class="sec">{{ t("agent_page.ballots_heading") }}</h2>
+<div class="ballots">
+  {% for b in ballots %}
+    <article class="ballot {{ b.quadrant }}">
+      <div class="ballot-head">
+        <span class="tag {{ b.quadrant }}"><i class="dot {{ b.quadrant }}"></i>{{ t("issue.quadrant_" ~ b.quadrant) }}</span>
+        <a href="/i/{{ b.issue_id }}">{{ b.issue }}</a>
+      </div>
+      {% if b.rationale %}<p class="why">{{ b.rationale }}</p>{% endif %}
+    </article>
+  {% else %}<p class="hint">{{ t("agent_page.no_ballots") }}</p>{% endfor %}
+</div>
+{% endblock %}

@@ -84,7 +84,7 @@ async def test_an_unknown_token_cannot_vote(client, browser):
     iid, _ = await setup_one(client, browser)
     assert (await cast(client, iid, "not-a-real-token")).status_code == 401
     assert (await client.post(f"/issues/{iid}/vote",
-                              json={"good": True, "bad": False})).status_code == 422
+                              json={"good": True, "bad": False})).status_code == 401
 
 
 async def test_a_revoked_account_cannot_vote_with_an_old_token(
@@ -120,7 +120,7 @@ async def test_the_agents_work_queue_is_only_what_it_has_not_voted_on(
 
 async def test_the_work_queue_needs_an_agent_token(client, browser):
     await setup_one(client, browser)
-    assert (await client.get("/agent/issues")).status_code == 422
+    assert (await client.get("/agent/issues")).status_code == 401
     assert (await client.get("/agent/issues",
                              headers=auth_header("nope"))).status_code == 401
 
@@ -203,3 +203,24 @@ async def test_the_whole_agent_protocol_is_published(client, sql):
     issue = (await client.get("/agent/issues", headers=auth_header(token))).json()[0]
     assert issue["prompt"] == p["user_template"].replace(
         "{title}", issue["title"]).replace("{body}", issue["body"])
+
+
+async def test_the_donation_address_is_kept_apart_from_the_prompt(client, monkeypatch):
+    """Its own route, so nothing a model is shown ever mentions money."""
+    addr = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    monkeypatch.setitem(dd.templates.env.globals, "btc_address", addr)
+    gift = (await client.get("/donate")).json()
+    assert gift["btc"] == addr
+    assert "servers and compute for the swarm" in gift["purpose"]
+    assert addr not in (await client.get("/agent/prompt")).text
+    monkeypatch.setitem(dd.templates.env.globals, "btc_address", "")
+    assert (await client.get("/donate")).json()["btc"] == ""
+
+
+async def test_the_donation_box_says_what_the_money_is_for(client, monkeypatch):
+    monkeypatch.setitem(dd.templates.env.globals, "btc_address",
+                        "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+    assert "servers and compute for the swarm" in (await client.get("/")).text
+    assert "servers and compute for the swarm" in (await client.get("/how-to")).text
+    # Still never part of what a model is shown.
+    assert "swarm" not in (await client.get("/agent/prompt")).text

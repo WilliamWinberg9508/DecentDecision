@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Decent Decision">
+  <defs>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6c7bff"/><stop offset=".5" stop-color="#d98bff"/><stop offset="1" stop-color="#ffc46b"/>
+    </linearGradient>
+    <radialGradient id="g-s" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#9dffd0"/><stop offset="1" stop-color="#17b97a"/></radialGradient>
+    <radialGradient id="g-c" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffe7a8"/><stop offset="1" stop-color="#f0a21a"/></radialGradient>
+    <radialGradient id="g-o" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ff9db0"/><stop offset="1" stop-color="#e0334f"/></radialGradient>
+    <radialGradient id="g-i" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#d4d9ff"/><stop offset="1" stop-color="#7b86d6"/></radialGradient>
+    <radialGradient id="core" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#ffe9bd"/><stop offset="1" stop-color="#ffc46b" stop-opacity="0"/></radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.2"/></filter>
+  </defs>
+  <!-- the network: four people, each joined to the next, and all to the middle -->
+  <g fill="none" stroke="url(#ring)" stroke-linecap="round">
+    <path d="M36 36H92V92H36Z" stroke-width="3.2" stroke-opacity=".95" stroke-linejoin="round"/>
+    <path d="M36 36L92 92M92 36L36 92" stroke-width="2" stroke-opacity=".55"/>
+  </g>
+  <!-- the middle: the decision -->
+  <circle cx="64" cy="64" r="22" fill="url(#core)"/>
+  <circle cx="64" cy="64" r="7" fill="#fff" stroke="#a98bff" stroke-width="1.6"/>
+  <!-- four readings, one per corner of the quadrant: supported, contested / irrelevant, opposed -->
+  <g filter="url(#glow)" opacity=".75">
+    <circle cx="36" cy="36" r="15" fill="#17b97a"/><circle cx="92" cy="36" r="15" fill="#f0a21a"/>
+    <circle cx="36" cy="92" r="15" fill="#7b86d6"/><circle cx="92" cy="92" r="15" fill="#e0334f"/>
+  </g>
+  <circle cx="36" cy="36" r="13" fill="url(#g-s)"/><circle cx="92" cy="36" r="13" fill="url(#g-c)"/>
+  <circle cx="36" cy="92" r="13" fill="url(#g-i)"/><circle cx="92" cy="92" r="13" fill="url(#g-o)"/>
+  <g fill="#fff" fill-opacity=".55"><circle cx="31.5" cy="31" r="3.2"/><circle cx="87.5" cy="31" r="3.2"/><circle cx="31.5" cy="87" r="3.2"/><circle cx="87.5" cy="87" r="3.2"/></g>
+</svg>

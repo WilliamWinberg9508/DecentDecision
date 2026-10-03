@@ -15,6 +15,10 @@
     {% if smtp %}{{ t("admin.done_verify_sent") }}{% else %}{{ t("admin.done_verify_no_mail") }}{% endif %}
     <pre class="token">{{ done[7:] }}</pre>
   </div>
+{% elif done and done.startswith('resent-all:') %}
+  <p class="notice" style="border-left-color: var(--supported)">{{ tn("admin.done_resent_all", done[11:]|int) }}</p>
+{% elif done == 'no-mail' %}
+  <p class="notice">{{ t("admin.done_no_mail") }}</p>
 {% elif done == 'forum-invalid' %}
   <p class="notice">{{ t("admin.done_forum_invalid") }}</p>
 {% elif done == 'forum-taken' %}
@@ -24,6 +28,14 @@
 {% endif %}
 
 <h2>{{ t("admin.applications_heading") }}</h2>
+
+{% if unverified %}
+  <form method="post" action="/admin/resend-all-verifications" style="margin-bottom:18px">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="quiet">{{ tn("admin.resend_all_button", unverified) }}</button>
+    <span class="issue-meta">{{ t("admin.resend_all_hint") }}</span>
+  </form>
+{% endif %}
 
 {% if not pending %}
   <p class="lede">{{ t("admin.no_applications") }}</p>

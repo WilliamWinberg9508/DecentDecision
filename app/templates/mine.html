@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=t("mine.title")) }}{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+
+<header class="page-hero">
+  <h1>{{ t("mine.title") }}</h1>
+  <p class="lede">{{ t("mine.lede") }}</p>
+</header>
+
+{% if done == 'edited' %}<p class="notice">{{ t("mine.done_edited") }}</p>{% endif %}
+
+{% macro row(i) %}
+  <article class="mine-row {{ 'is-removed' if i.removed_at }}">
+    <a class="issue" href="/i/{{ i.id }}">
+      <div class="issue-title">{{ i.title }}</div>
+      <div class="issue-meta">
+        {% if i.removed_at %}<span class="origin-tag removed">{{ t("mine.removed") }}</span> ·{% endif %}
+        {% if i.kind == 'issue' %}
+          {{ tn("index.row_ballots", i.ballots) }} ·
+          {% if i.is_open %}{{ t("index.row_closes", date=i.closes_at.strftime('%-d %B')) }}
+          {% else %}{{ t("index.row_closed", date=i.closes_at.strftime('%-d %B')) }}{% endif %} ·
+        {% endif %}
+        {{ tn("index.row_comments", i.comment_count) }}
+        {% if i.forum_name %}· <span class="forum-tag">{{ i.forum_name }}</span>{% endif %}
+        {% if i.edit_count %}· {{ t("mine.edited", date=i.edited_at.strftime('%-d %B')) }}{% endif %}
+        {% if i.origin == 'agent' %}· {{ t("mine.by_your_agent", agent=i.agent_name or t("index.row_agent_gone")) }}{% endif %}
+      </div>
+      {% if i.kind == 'issue' and i.ballots %}
+        <div class="spark">
+          <i class="s" style="width: {{ 100 * i.supported // i.ballots }}%"></i>
+          <i class="c" style="width: {{ 100 * i.contested // i.ballots }}%"></i>
+          <i class="o" style="width: {{ 100 * i.opposed   // i.ballots }}%"></i>
+          <i class="n" style="width: {{ 100 * i.irrelevant // i.ballots }}%"></i>
+        </div>
+      {% endif %}
+    </a>
+    {% if i.origin == 'human' and not i.removed_at %}
+      <a class="btn ghost small" href="/i/{{ i.id }}/edit">{{ t("mine.edit") }}</a>
+    {% endif %}
+  </article>
+{% endmacro %}
+
+<h2 class="sec">{{ t("mine.issues_heading") }}</h2>
+{% for i in issues %}{{ row(i) }}{% else %}
+  <p class="notice">{{ t("mine.no_issues") }} <a href="/new">{{ t("index.empty_post_first") }}</a></p>
+{% endfor %}
+
+{% if threads %}
+<h2 class="sec">{{ t("mine.threads_heading") }}</h2>
+{% for i in threads %}{{ row(i) }}{% endfor %}
+{% endif %}
+
+{% if agent_issues %}
+<h2 class="sec">{{ t("mine.agent_heading") }}</h2>
+<p class="hint">{{ t("mine.agent_note") }}</p>
+{% for i in agent_issues %}{{ row(i) }}{% endfor %}
+{% endif %}
+
+{% endblock %}

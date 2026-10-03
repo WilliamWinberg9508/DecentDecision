@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=essay_title) }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}{{ essay_title }}{% endblock %}
+{% block og_description %}{{ t("essay.share_description") }}{% endblock %}
+{% block og_image %}/static/og-essay.jpg{% endblock %}
+{% block og_image_alt %}{{ t("essay.share_alt") }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/essay.css?v={{ essay_css_v }}">
+<script type="application/ld+json">{{ {"@context": "https://schema.org", "@type": "Article", "headline": essay_title, "description": t("essay.share_description"), "author": {"@type": "Person", "name": t("essay.byline")}, "image": site_url ~ "/static/og-essay.jpg", "mainEntityOfPage": site_url ~ "/essay", "publisher": {"@type": "Organization", "name": t("common.site_name"), "url": site_url ~ "/"}}|tojson }}</script>{% endblock %}
+{% block body_class %}essay-page{% endblock %}
+{% block content %}
+{# Everything here is CSS, apart from the copy button's ten lines of script. The words are the
+   owner's own, in essay.md; the page's chrome is in texts.toml [essay]. #}
+
+<div class="progress" aria-hidden="true"></div>
+
+<div class="hero">
+  {{ network_svg }}
+  <div class="hero-text">
+    <p class="kicker">{{ t("essay.kicker") }}</p>
+    <h1><span class="main">{{ title_main }}</span>{% if title_sub %}<span class="sub">{{ title_sub }}</span>{% endif %}</h1>
+    <p class="byline">{{ t("essay.byline") }}</p>
+  </div>
+  <a class="cue" href="#begin"><span>{{ t("essay.scroll_hint") }}</span><i aria-hidden="true"></i></a>
+</div>
+
+{% if intro %}
+<aside class="letter" id="begin">
+  <span class="label">{{ t("essay.letter_label") }}</span>
+  {{ intro }}
+  <div class="copy">
+    {# Hidden until static/copy.js runs; without script the text below is
+       the way to take it. #}
+    <button type="button" class="copy-btn" data-target="essay-raw" hidden
+            data-done="{{ t('essay.copied') }}" data-failed="{{ t('essay.copy_failed') }}">{{ t("essay.copy") }}</button>
+    <details class="copy-manual">
+      <summary>{{ t("essay.copy_manual") }}</summary>
+      <textarea id="essay-raw" readonly rows="8" spellcheck="false" aria-label="{{ t('essay.copy_manual') }}">{{ raw }}</textarea>
+    </details>
+  </div>
+  <script src="/static/copy.js" defer></script>
+</aside>
+{% endif %}
+
+<article class="essay-body"{% if not intro %} id="begin"{% endif %}>
+{{ night }}
+</article>
+
+{% if dawn %}
+<section class="dawn">
+  <div class="dawn-inner">
+    {{ dawn }}
+    <p class="cta-lede">{{ t("essay.cta_lede") }}</p>
+    <div class="cta-row">
+      <a href="/new">{{ t("essay.cta_post") }}</a>
+      <a href="/how-to" class="alt">{{ t("essay.cta_run") }}</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if after %}
+<div class="essay-body essay-after">
+{{ after }}
+</div>
+{% endif %}
+{% endblock %}
