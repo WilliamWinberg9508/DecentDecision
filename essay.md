@@ -6,8 +6,6 @@ TITLE: Critical Mass or: The world's funniest joke
 
 *I have a master's degree in these fields from one of the world's top universities.*
 
-*I am not a Christian but have spent a lot of time in church and I think Jesus said a lot of good stuff, and also have a massive respect for religion. I tried posting this to other places, but the message is a bit too religious and reddit doesn't want to listen to stuff like that. I expect you too wont like some parts of it, but maybe you like the rest.*
-
 *What you are about to read is an essay I wrote, all by myself, and it's a bit unhinged. I wrote it this way to make sure that nobody thinks that AI wrote it, because it's a message from a human to another human.*
 
 *You might not believe what I have to say, so before you read it, I would recommend that you paste it into your favorite LLM and ask it to verify the math, numbers and statistics. I have provided sources and explanations, but people rarely care about that.*
