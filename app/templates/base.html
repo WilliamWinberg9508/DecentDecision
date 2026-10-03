@@ -17,6 +17,7 @@
 <meta property="og:description" content="{{ t('common.link_preview') }}">
 <meta property="og:image" content="{{ site_url }}/static/og-card.jpg">
 <meta name="twitter:card" content="summary_large_image">
+{% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
 
@@ -31,6 +32,7 @@
   </label>
   <a class="brand" href="/"><img src="/static/logo-mark.png" alt=""
     width="54" height="48">{{ t("common.site_name_logo") }}</a>
+  <a class="toplink {{ 'on' if request.url.path == '/essay' }}" href="/essay">{{ t("nav.essay") }}</a>
   <nav>
     <a href="/new" class="cta">{{ t("nav.ask_button") }}</a>
     {% if user %}

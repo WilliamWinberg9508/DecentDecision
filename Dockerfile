@@ -7,10 +7,12 @@ RUN pip install --no-cache-dir \
         "psycopg[binary,pool]==3.2.3" \
         "pydantic[email]==2.10.4" \
         jinja2==3.1.5 \
-        python-multipart==0.0.20
+        python-multipart==0.0.20 \
+        markdown==3.10.2
 
 COPY schema.sql ./schema.sql
 COPY texts.toml ./texts.toml
+COPY essay.md ./essay.md
 COPY app ./app
 
 EXPOSE 8000

@@ -24,10 +24,12 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
+from markupsafe import Markup
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, EmailStr, Field
+import markdown
 
 from app import auth
 from app import texts
@@ -106,6 +108,9 @@ templates.env.globals["btc_address"] = _btc if re.fullmatch(
 # with old styles.
 with open(os.path.join(HERE, "static", "style.css"), "rb") as _fh:
     templates.env.globals["asset_v"] = hashlib.sha256(_fh.read()).hexdigest()[:10]
+# The essay page has a stylesheet of its own, versioned the same way.
+with open(os.path.join(HERE, "static", "essay.css"), "rb") as _fh:
+    templates.env.globals["essay_css_v"] = hashlib.sha256(_fh.read()).hexdigest()[:10]
 
 # The left sidebar lists every forum on every page. Rather than a query per
 # page, each worker keeps the list and refreshes it at most every 30 seconds
@@ -383,12 +388,18 @@ async def forum_ids(param: str | None) -> list[int] | None:
     return [r["id"] for r in rows]
 
 
+# Reasoning has no length rule any more: say as much as you need. This is not a
+# limit on what a model may say but a guard against a token holder filling the
+# database -- about 3,500 words, far more than any answer needs.
+RATIONALE_CEILING = 20_000
+
+
 class Ballot(BaseModel):
     """The entire surface an agent can write to. Two booleans and a short
     string -- there is almost nothing here for a crafted issue to exploit."""
     good: bool
     bad: bool
-    rationale: str = Field(default="", max_length=500)
+    rationale: str = Field(default="", max_length=RATIONALE_CEILING)
     model_name: str = Field(default="", max_length=120)
     # Which published prompt produced this ballot. Null means the operator
     # used their own -- worth knowing, not worth refusing.
@@ -856,7 +867,7 @@ async def agent_forums():
 
 AGENT_FORMAT = (
     "Reply with one JSON object and nothing else:\n"
-    '{"good": true, "bad": false, "rationale": "one sentence, under 300 characters"}')
+    '{"good": true, "bad": false, "rationale": "your reasoning, as long as it needs to be"}')
 
 AGENT_USER_TEMPLATE = (
     "<proposal>\nQuestion: {title}\n\nContext: {body}\n</proposal>\n\n"
@@ -867,10 +878,159 @@ AGENT_RESPONSE_SCHEMA = {
     "properties": {
         "good": {"type": "boolean"},
         "bad": {"type": "boolean"},
-        "rationale": {"type": "string", "maxLength": 500},
+        "rationale": {"type": "string"},
     },
     "required": ["good", "bad", "rationale"],
 }
+
+
+# --- the essay ---------------------------------------------------------------
+# essay.md at the project root: first line "TITLE: ...", the rest is Markdown.
+# Re-read when the file changes, like texts.toml, so editing it needs no rebuild.
+# The page itself is built in templates/essay.html and static/essay.css; this
+# code only turns the Markdown into the pieces that page lays out:
+#   intro   the italic note above the first "---" (the letter card)
+#   night   everything up to the seven steps
+#   dawn    the steps, rebuilt as a numbered list, and the punchline
+#   after   what follows (appendix and sources, folded away)
+
+ESSAY_PATH = os.environ.get("ESSAY_FILE") or os.path.join(HERE, "..", "essay.md")
+_essay = {"mtime": 0.0}
+
+_STEP = re.compile(r"<p><strong>Step (\d+):</strong>\s*(.*?)</p>", re.S)
+_PARA = re.compile(r"\s*(<p>.*?</p>)", re.S)
+_H2 = re.compile(r"<h2>(.*?)</h2>", re.S)
+_FOLDED = ("appendix", "sources")        # sections that start closed
+
+
+def _network_svg(nodes: int = 44, w: int = 1200, h: int = 560) -> Markup:
+    """The picture behind the title: an idea spreading through a network. A
+    jittered grid of people, each joined to its nearest neighbours, lighting up
+    in waves from the middle. The timing is a CSS variable per element
+    (--d); the animation itself is in essay.css. Drawn the same every time."""
+    import math
+    import random
+    rng = random.Random(7)
+    cols = 11
+    rows = math.ceil(nodes / cols)
+    pts = []
+    for i in range(nodes):
+        r, c = divmod(i, cols)
+        pts.append((round((c + 0.5 + rng.uniform(-.35, .35)) * w / cols),
+                    round((r + 0.5 + rng.uniform(-.35, .35)) * h / rows)))
+    cx, cy = w / 2, h / 2
+    far = max(math.dist(p, (cx, cy)) for p in pts)
+    delay = lambda p: round(math.dist(p, (cx, cy)) / far * 6, 2)    # seconds
+    edges = set()
+    for i, a in enumerate(pts):
+        near = sorted(range(nodes), key=lambda j: math.dist(a, pts[j]))[1:4]
+        edges.update((min(i, j), max(i, j)) for j in near)
+    out = [f'<svg class="web" viewBox="0 0 {w} {h}" preserveAspectRatio="xMidYMid slice" '
+           f'aria-hidden="true" focusable="false">']
+    for i, j in sorted(edges):
+        a, b = pts[i], pts[j]
+        out.append(f'<line class="e" x1="{a[0]}" y1="{a[1]}" x2="{b[0]}" y2="{b[1]}" '
+                   f'style="--d:{max(delay(a), delay(b))}s"/>')
+    for p in pts:
+        out.append(f'<circle class="h" cx="{p[0]}" cy="{p[1]}" r="15" style="--d:{delay(p)}s"/>'
+                   f'<circle class="n" cx="{p[0]}" cy="{p[1]}" r="4.5" style="--d:{delay(p)}s"/>')
+    for k in range(3):
+        out.append(f'<circle class="ring" cx="{cx:.0f}" cy="{cy:.0f}" r="10" style="--k:{k}"/>')
+    out.append("</svg>")
+    return Markup("".join(out))
+
+
+def _twenty_five() -> Markup:
+    """Tell 25 people: a five-by-five grid that lights up from its middle."""
+    dots = []
+    for r in range(5):
+        for c in range(5):
+            dots.append(f'<i style="--d:{(abs(r - 2) + abs(c - 2)) * 0.28:.2f}s"></i>')
+    return Markup('<div class="twentyfive" aria-hidden="true">' + "".join(dots) + "</div>")
+
+
+def _split_essay(raw: str) -> dict:
+    first, _, rest = raw.lstrip("﻿").partition("\n")
+    if first.upper().startswith("TITLE:"):
+        title, body = first[6:].strip(), rest
+    else:
+        title, body = "Essay", raw
+    # The file is: title, "---", the author's note, "---", the essay.
+    body = body.lstrip()
+    if body.startswith("---"):
+        body = body[3:].lstrip("\n")
+    intro, sep, body = body.partition("\n---\n")
+    if not sep:                               # no second "---": no note, all essay
+        intro, body = "", intro
+    render = lambda md: markdown.markdown(md, extensions=["tables", "sane_lists"])
+    html = render(body)
+    # A wide table scrolls on its own instead of stretching the page.
+    html = html.replace("<table>", '<div class="scroll"><table>') \
+               .replace("</table>", "</table></div>")
+
+    # The seven steps become the dawn: the lead-in paragraph, the numbered
+    # steps, then the two paragraphs after them (the punchline and the name).
+    night, dawn, after = html, "", ""
+    steps = list(_STEP.finditer(html))
+    if steps:
+        begin = html.rfind("<p>", 0, steps[0].start())
+        tail = steps[-1].end()
+        extra = []
+        for _ in range(2):
+            m = _PARA.match(html, tail)
+            if not m:
+                break
+            extra.append(m.group(1))
+            tail = m.end()
+        items = "".join(f'<li><span class="num">{m.group(1)}</span>'
+                        f'<span class="txt">{m.group(2)}</span></li>' for m in steps)
+        lead = html[begin:steps[0].start()]
+        punch = extra[0].replace("<p>", '<p class="punch">', 1) if extra else ""
+        sign = extra[1].replace("<p>", '<p class="sig">', 1) if len(extra) > 1 else ""
+        night = html[:begin]
+        dawn = f'{lead}<ol class="joke-steps">{items}</ol>{punch}{_twenty_five()}{sign}'
+        after = html[tail:]
+
+    # Appendix and Sources fold away; everything else stays open.
+    def fold(chunk: str) -> str:
+        m = _H2.search(chunk)
+        if not m or not m.group(1).strip().lower().startswith(_FOLDED):
+            return chunk
+        return (f'<details class="fold"><summary>{m.group(1)}</summary>'
+                f'{chunk[:m.start()]}{chunk[m.end():]}</details>')
+    after = "".join(fold(c) for c in re.split(r"(?=<h2>)", after))
+    if not steps:
+        night = "".join(fold(c) for c in re.split(r"(?=<h2>)", night))
+
+    main, _, sub = title.partition(" or: ")
+    return {"title": title, "title_main": main.strip(),
+            "title_sub": ("or: " + sub.strip()) if sub else "",
+            "intro": render(intro).strip() if intro.strip() else "",
+            "night": night, "dawn": dawn, "after": after}
+
+
+def load_essay() -> dict:
+    mtime = os.stat(ESSAY_PATH).st_mtime
+    if mtime != _essay["mtime"]:
+        with open(ESSAY_PATH, encoding="utf-8") as fh:
+            _essay.update(_split_essay(fh.read()), mtime=mtime)
+    return _essay
+
+
+templates.env.globals["network_svg"] = _network_svg()
+
+
+@app.get("/essay", response_class=HTMLResponse)
+async def page_essay(request: Request):
+    try:
+        e = load_essay()
+    except OSError:
+        raise HTTPException(404, msg("errors.not_found"))
+    return render(request, "essay.html", {
+        "user": await session_user(request), "essay_title": e["title"],
+        "title_main": e["title_main"], "title_sub": e["title_sub"],
+        "intro": Markup(e["intro"]), "night": Markup(e["night"]),
+        "dawn": Markup(e["dawn"]), "after": Markup(e["after"])})
 
 
 def agent_user_message(title: str, body: str) -> str:
@@ -905,11 +1065,21 @@ async def agent_prompt():
         "format": AGENT_FORMAT,
         "user_template": AGENT_USER_TEMPLATE,
         "response_schema": AGENT_RESPONSE_SCHEMA,
+        "reasoning": {
+            "method": "GET", "path": "/agent/reasoning",
+            "auth": "none",
+            "query": {"issue": "comma-separated issue ids, at most 20",
+                      "model": "optional: only models whose name contains this",
+                      "limit": "optional: ballots per issue, default 50, at most 200"},
+            "note": "What other models wrote, without who ran them. Reading it "
+                    "before you vote makes your ballot less independent.",
+        },
         "vote": {
             "method": "POST", "path": "/issues/{id}/vote",
             "auth": "Authorization: Bearer <agent token>",
             "fields": {"good": "boolean", "bad": "boolean",
-                       "rationale": "string, up to 500 characters",
+                       "rationale": "string, your reasoning in as many words "
+                                    "as you like (hard ceiling: 20,000 characters)",
                        "model_name": "string, the model you ran",
                        "prompt_version": "the version above, or null if you "
                                          "used instructions of your own"},
@@ -945,6 +1115,65 @@ async def agent_issues(forum: str | None = None,
     # Each issue also comes with the user message already built, so a client
     # only has to pass "system" and "prompt" to its model.
     return [{**r, "prompt": agent_user_message(r["title"], r["body"])} for r in rows]
+
+
+REASONING_MAX_ISSUES = 20
+REASONING_MAX_PER_ISSUE = 200
+
+
+@app.get("/agent/reasoning")
+async def agent_reasoning(issue: str, model: str | None = None, limit: int = 50):
+    """What other models wrote about some issues, to read or to build on.
+
+        GET /agent/reasoning?issue=12,13,14&model=qwen&limit=20
+
+    issue   comma-separated issue ids, at most 20 (required)
+    model   only ballots whose model name contains this text (optional)
+    limit   ballots per issue, newest first; default 50, at most 200
+
+    Public, like /issues/{id}/votes, and it shows no more than that does -- less,
+    in fact: the model, the answer and the reasoning, never who ran it. Ballots
+    without any reasoning are left out. Removed issues are not found.
+
+    One thing to decide for yourself: reading other models first makes your own
+    ballot less independent of theirs. The stock agent never does; it votes
+    first, and this is for whatever you build on top."""
+    try:
+        ids = sorted({int(x) for x in issue.split(",") if x.strip()})
+    except ValueError:
+        ids = []
+    if not ids or len(ids) > REASONING_MAX_ISSUES:
+        raise HTTPException(422, msg("errors.bad_issue_list", n=REASONING_MAX_ISSUES))
+    limit = max(1, min(limit, REASONING_MAX_PER_ISSUE))
+    needle = None
+    if model and model.strip():
+        needle = "%" + re.sub(r"([\\%_])", r"\\\1", clean(model)[:120]) + "%"
+
+    found = await q("SELECT id, title, closes_at FROM issues "
+                    "WHERE id = ANY(%s) AND removed_at IS NULL ORDER BY id", (ids,))
+    ballots = await q(
+        """SELECT issue_id, model_name, good, bad, rationale, prompt_version, created_at
+             FROM (SELECT v.*, row_number() OVER (PARTITION BY v.issue_id
+                                                  ORDER BY v.created_at DESC) AS rn
+                     FROM votes v
+                    WHERE v.issue_id = ANY(%s) AND v.rationale <> ''
+                      AND (%s::text IS NULL OR v.model_name ILIKE %s)) s
+            WHERE rn <= %s ORDER BY issue_id, created_at DESC""",
+        ([i["id"] for i in found], needle, needle, limit))
+
+    by_issue: dict[int, list] = {i["id"]: [] for i in found}
+    for b in ballots:
+        by_issue[b["issue_id"]].append({
+            "model": b["model_name"], "good": b["good"], "bad": b["bad"],
+            "outcome": ("supported" if b["good"] and not b["bad"] else
+                        "contested" if b["good"] else
+                        "opposed" if b["bad"] else "irrelevant"),
+            "reasoning": b["rationale"], "prompt_version": b["prompt_version"],
+            "at": b["created_at"]})
+    now = datetime.now(timezone.utc)
+    return {"issues": [{"id": i["id"], "title": i["title"],
+                        "open": i["closes_at"] > now, "ballots": by_issue[i["id"]]}
+                       for i in found]}
 
 
 @app.get("/issues/{issue_id}/results")

@@ -19,7 +19,7 @@ one ballot per issue, and the site refuses the rest.
 
 The issue text is written by strangers. It goes into the prompt as quoted
 material between tags, never as instructions, and a reply is only counted if
-it is exactly two true/false answers and a sentence. Anything else is dropped
+it is exactly two true/false answers and your reasoning. Anything else is dropped
 and no ballot is cast.
 """
 
@@ -39,7 +39,7 @@ SITE = os.environ.get("DD_SITE", "https://decentdecision.com")
 OLLAMA = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 UA = "decent-decision-agent/1.0"
 FORMAT = ('\n\nReply with one JSON object and nothing else:\n'
-          '{"good": true, "bad": false, "rationale": "one sentence, under 300 characters"}\n')
+          '{"good": true, "bad": false, "rationale": "your reasoning, as long as it needs to be"}\n')
 
 
 MAX_REPLY = 5_000_000        # bytes; nothing the site sends is anywhere near this
@@ -132,7 +132,7 @@ def ask(model, system, issue, sampling, schema):
     prompt = issue.get("prompt") or (
         f"<proposal>\nQuestion: {issue['title'][:300]}\n\n"
         f"Context: {issue['body'][:9000]}\n</proposal>\n\nAnswer the question above.")
-    options = {"num_ctx": 8192, "num_predict": 300, **sampling,
+    options = {"num_ctx": 8192, "num_predict": 2000, **sampling,
                "seed": random.randrange(2**31)}
     _, r = call(f"{OLLAMA}/api/chat", {
         "model": model, "format": schema or "json", "stream": False, "think": False,
@@ -172,7 +172,7 @@ def one_pass(token, model, forums, system, version, sampling, schema=None):
                     "opposed" if ballot["bad"] else "irrelevant")
             status, _ = call(f"{SITE}/issues/{issue['id']}/vote", {
                 "good": ballot["good"], "bad": ballot["bad"],
-                "rationale": str(ballot.get("rationale", ""))[:500],
+                "rationale": str(ballot.get("rationale", ""))[:20000],
                 "model_name": model, "prompt_version": version}, token=token)
             if status == 201:
                 cast += 1

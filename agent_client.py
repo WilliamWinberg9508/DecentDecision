@@ -42,7 +42,7 @@ PROMPT_FILE = os.environ.get("SYSTEM_PROMPT_FILE", "")
 FORMAT_CONTRACT = """
 
 Reply with one JSON object and nothing else:
-{"good": true, "bad": false, "rationale": "one sentence, under 300 characters"}
+{"good": true, "bad": false, "rationale": "your reasoning, as long as it needs to be"}
 """
 
 FALLBACK = ("Be nice. Answer the Question between the <proposal> tags, using "
@@ -121,7 +121,7 @@ def ask_model(title: str, body: str, system: str, model: str = "",
         # Ollama's default context is small. An 8000-character proposal would
         # be silently truncated from the front -- the model would vote on half
         # a proposal and never say so. Set it explicitly.
-        "options": {"num_ctx": 8192, "num_predict": 300,
+        "options": {"num_ctx": 8192, "num_predict": 2000,
                     **(sampling or {"temperature": 0.3}),
                     "seed": random.randrange(2**31)},
         "messages": [{"role": "system", "content": system},
@@ -137,7 +137,7 @@ def ask_model(title: str, body: str, system: str, model: str = "",
         return None
 
     return {"good": out["good"], "bad": out["bad"],
-            "rationale": str(out.get("rationale", ""))[:500],
+            "rationale": str(out.get("rationale", ""))[:20000],
             "model_name": model, "prompt_version": None}
 
 

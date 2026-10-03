@@ -795,3 +795,38 @@ ol.steps p { margin: 0 0 8px; }
 @media (max-width: 960px) {
   .donate { position: static; max-width: none; margin: 18px 20px 0; box-shadow: none; }
 }
+
+/* --- the essay, and the link to it beside the logo ------------------------------ */
+
+a.toplink {
+  color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600;
+  padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+}
+a.toplink:hover, a.toplink.on { color: var(--accent); background: var(--paper); }
+@media (max-width: 620px) { a.toplink { padding: 6px 8px; font-size: 13px; } }
+
+.essay { max-width: 68ch; }
+.essay h1 { margin-bottom: 20px; }
+.essay h2 { margin-top: 40px; }
+.essay p, .essay li { line-height: 1.7; }
+.essay blockquote {
+  margin: 18px 0; padding: 2px 18px; border-left: 3px solid var(--line); color: var(--muted);
+}
+.essay hr { border: 0; border-top: 1px solid var(--line); margin: 36px 0; }
+.essay .scroll { margin: 18px 0; }
+.essay table { font-size: 14px; }
+.essay td, .essay th { padding: 7px 12px 7px 0; vertical-align: top; }
+.essay code { font-size: 0.9em; overflow-wrap: anywhere; }
+.essay ol, .essay ul { padding-left: 24px; }
+.essay ol li { overflow-wrap: anywhere; }
+/* Long reasoning from a model keeps its line breaks and never stretches the page. */
+.ballot .why { white-space: pre-line; overflow-wrap: anywhere; }
+.essay-note {
+  margin: 0 0 18px; padding: 12px 16px; border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: 8px; background: var(--card);
+}
+.essay-note a { font-weight: 600; }
+
+/* On a phone the essay link has to fit beside the logo, Register and Log in:
+   the logo mark stays and its name gives way. */
+@media (max-width: 480px) { .brand { font-size: 0; } }

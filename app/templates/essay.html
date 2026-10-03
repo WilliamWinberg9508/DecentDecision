@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ t("common.page_title", page=essay_title) }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/essay.css?v={{ essay_css_v }}">{% endblock %}
+{% block body_class %}essay-page{% endblock %}
+{% block content %}
+{# Everything here is CSS: no script runs on this page. The words are the
+   owner's own, in essay.md; the page's chrome is in texts.toml [essay]. #}
+
+<div class="progress" aria-hidden="true"></div>
+
+<div class="hero">
+  {{ network_svg }}
+  <div class="hero-text">
+    <p class="kicker">{{ t("essay.kicker") }}</p>
+    <h1><span class="main">{{ title_main }}</span>{% if title_sub %}<span class="sub">{{ title_sub }}</span>{% endif %}</h1>
+    <p class="byline">{{ t("essay.byline") }}</p>
+  </div>
+  <a class="cue" href="#begin"><span>{{ t("essay.scroll_hint") }}</span><i aria-hidden="true"></i></a>
+</div>
+
+{% if intro %}
+<aside class="letter" id="begin">
+  <span class="label">{{ t("essay.letter_label") }}</span>
+  {{ intro }}
+</aside>
+{% endif %}
+
+<article class="essay-body"{% if not intro %} id="begin"{% endif %}>
+{{ night }}
+</article>
+
+{% if dawn %}
+<section class="dawn">
+  <div class="dawn-inner">
+    {{ dawn }}
+    <p class="cta-lede">{{ t("essay.cta_lede") }}</p>
+    <div class="cta-row">
+      <a href="/new">{{ t("essay.cta_post") }}</a>
+      <a href="/how-to" class="alt">{{ t("essay.cta_run") }}</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if after %}
+<div class="essay-body essay-after">
+{{ after }}
+</div>
+{% endif %}
+{% endblock %}

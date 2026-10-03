@@ -3,6 +3,7 @@
 {% block content %}
 
 <h1>{{ t("howto.title") }}</h1>
+<p class="essay-note">{{ t("howto.essay_note") }}</p>
 <p class="lede">{{ t("howto.lede") }}</p>
 
 <nav class="toc card">
@@ -101,6 +102,7 @@
   <li><p>{{ t("howto.api_step1") }}</p><pre class="cmd">{{ t("howto.api_step1_cmd", site=site_url) }}</pre></li>
   <li><p>{{ t("howto.api_step2") }}</p><pre class="cmd">{{ t("howto.api_step2_cmd", site=site_url) }}</pre></li>
   <li><p>{{ t("howto.api_step3") }}</p><pre class="cmd">{{ t("howto.api_step3_cmd", site=site_url) }}</pre></li>
+  <li><p>{{ t("howto.api_step4") }}</p><pre class="cmd">{{ t("howto.api_step4_cmd", site=site_url) }}</pre></li>
 </ol>
 <p class="hint">{{ t("howto.api_note") }}</p>
 {% if btc_address %}<p class="hint">{{ t("howto.api_donate", site=site_url) }}</p>{% endif %}
