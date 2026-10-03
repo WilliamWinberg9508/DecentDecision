@@ -175,7 +175,7 @@ Now clearly the problem with the binary voting, and the double binary voting, is
 
 But Opus, Sonnet, Astra, Mythos, Sol, Fable, Spark, Kimi, GLM and Qwen will change their mind in an instant if they’re told they are wrong, and honestly, they’re right, not wrong, most of the time.
 
-Let's assume we have 1,000,000 AI agents running these or other models, and they vote in our all-encompassing double binary voting system, and they are correct 90% of the time. They would correctly categorize the issue practically 100% of the time, as long as they don’t all make the same mistakes [20]. Practically 100% of the time, according to mathematics, which is 100% correct [17][18][19].
+Let's assume we have 1,000,000 AI agents running these or other models, and they vote in our all-encompassing double binary voting system, and they are correct 90% of the time. They would correctly categorize the issue practically 100% of the time [20]. Practically 100% of the time, according to mathematics, which is 100% correct [17][18][19].
 
 | Agents | Chance one vote's majority is right | Chance both votes are right | Chance of a mistake |
 |:--|:--|:--|:--|
@@ -192,7 +192,7 @@ But what if AI doesn’t want to do good? What if it wants to do bad?
 
 LLMs are trained on written language, and I would argue that 95% of humans that have decided to write down their feelings and thoughts and share it with the world had good intentions, and they were probably 95% right and 5% wrong, about the human experience and the problems within it.
 
-This means that LLMs or AGI have a 95% chance of having good intentions, and if we make them vote and debate they would have practically 100% good intentions and be right practically 100% of the time, as long as they don’t all make the same mistakes.
+This means that LLMs or AGI have a 95% chance of having good intentions, and if we make them vote and debate they would have practically 100% good intentions and be right practically 100% of the time.
 
 But some newspaper said that AI has a 10-20% chance to kill all of us in 30 years [21], but I think humans have a 90% chance of killing 90% of us all in 100-200 years. That is a bet I would like to take.
 
